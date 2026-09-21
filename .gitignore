@@ -1,0 +1,26 @@
+# distapi — .gitignore
+
+# Binary output
+dist/
+
+# Data directory (temporary job files)
+data/
+
+# Go build cache
+*.test
+
+# Node.js (frontend dependencies — install with npm ci)
+web/node_modules/
+
+# Frontend build output (committed only if needed; build from source)
+# web/dist/    # Uncomment if you want to commit built assets
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
