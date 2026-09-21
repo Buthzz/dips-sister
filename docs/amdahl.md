@@ -2,8 +2,6 @@
 
 Dokumen ini mengkaji batasan percepatan (*speedup*) teoretis dan efisiensi pemrosesan paralel pada kluster `distapi` menggunakan landasan **Hukum Amdahl** dan **Hukum Gustafson**.
 
----
-
 ## 1. Landasan Teoretis: Hukum Amdahl
 
 Diformulasikan oleh Gene Amdahl pada tahun 1967, hukum ini menyatakan bahwa peningkatan kecepatan sebuah program yang diparalelkan dibatasi secara mutlak oleh fraksi waktu dari bagian program yang bersifat **sekuensial murni** (tidak dapat diparalelkan).
@@ -27,8 +25,6 @@ flowchart LR
     end
 ```
 
----
-
 ## 2. Batas Asimtotik (Amdahl's Law Asymptote)
 
 Jika jumlah node ditingkatkan tanpa batas ($N \to \infty$):
@@ -40,8 +36,6 @@ $$S_{\max} = \lim_{N \to \infty} \frac{1}{(1 - P) + \frac{P}{N}} = \frac{1}{1 - 
 $$S_{\max} = \frac{1}{0.15} \approx 6.67\times$$
 
 Meskipun kluster diperbesar menjadi 100 laptop, sistem tidak akan mampu melampaui percepatan $6.67\times$ dari sistem *single-node*.
-
----
 
 ## 3. Matriks Perhitungan Speedup Kluster distapi
 
@@ -64,8 +58,6 @@ xychart-beta
     line [1.0, 1.74, 2.31, 2.76, 3.90, 4.93]
 ```
 
----
-
 ## 4. Faktor Penurunan Efisiensi Dunia Nyata (*Real-World Drag Factors*)
 
 Pada implementasi nyata di 4 laptop Windows via LAN/WLAN, nilai speedup aktual akan sedikit berada di bawah batas teoretis Amdahl akibat adanya friksi terdistribusi:
@@ -87,8 +79,6 @@ flowchart TD
 1. **Ukuran Citra vs. RTT Jaringan:**
    * Citra kecil (< 100 KB): Biaya kirim gRPC melebihi waktu pemrosesan piksel. Speedup menjadi rendah ($\le 1.5\times$).
    * Citra besar (2–5 MB): Waktu komputasi piksel mendominasi biaya transmisi data. Speedup mendekati batas teoretis ($2.5\times - 2.7\times$).
-
----
 
 ## 5. Perspektif Hukum Gustafson (Skalabilitas Beban Kerja)
 

@@ -2,8 +2,6 @@
 
 Panduan ini ditujukan bagi operator dan penguji untuk mengompilasi, mendistribusikan, menjalankan, dan mengevaluasi kluster **distapi** secara native pada lingkungan **Windows 10 / 11**.
 
----
-
 ## 1. Persiapan Awal & Kompilasi Binary
 
 Pastikan kompiler Go versi 1.22 ke atas terpasang pada mesin utama (Laptop 1):
@@ -21,8 +19,6 @@ go build -o dist\distapi.exe .\cmd\distapi
 ```
 
 File `dist\distapi.exe` yang dihasilkan bersifat *stand-alone* (tidak memerlukan runtime Go di laptop node). Cukup salin berkas `distapi.exe` ini via USB Flashdisk atau share folder lokal ke Laptop 2, 3, dan 4.
-
----
 
 ## 2. Peta Alokasi Host & IP Jaringan
 
@@ -42,8 +38,6 @@ flowchart LR
 
 > **Identifikasi IP:** Jalankan perintah `ipconfig` pada setiap laptop dan catat nilai `IPv4 Address` adapter Wi-Fi/Ethernet aktif.
 
----
-
 ## 3. Urutan Eksekusi Kluster (Execution Sequence)
 
 ### Langkah 1: Jalankan Master (Laptop 1)
@@ -60,8 +54,6 @@ Buka PowerShell pada Laptop 1 dan jalankan:
 *Tunggu hingga terminal menampilkan:*
 `level=INFO msg="gRPC server mendengarkan" addr=:9000`
 `level=INFO msg="HTTP server mendengarkan" addr=:8080`
-
----
 
 ### Langkah 2: Jalankan Node Worker (Laptop 2, 3, 4)
 
@@ -98,8 +90,6 @@ Buka PowerShell pada Laptop 1 dan jalankan:
   --log-level=info
 ```
 
----
-
 ## 4. Validasi Topologi Kluster
 
 Setelah seluruh node dijalankan, periksa pendaftaran node dari terminal Laptop 1 atau browser:
@@ -116,8 +106,6 @@ Pastikan output menampilkan ketiga node dengan status `"alive"`:
   {"node_id":"node-3","status":"alive","addr":"192.168.1.13:9000", ...}
 ]
 ```
-
----
 
 ## 5. Pengujian Alur Pemrosesan Batch (Workflow Test)
 
@@ -152,8 +140,6 @@ Invoke-WebRequest `
   -Uri "http://192.168.1.10:8080/api/v1/jobs/$jobId/results/img1.jpg" `
   -OutFile "C:\demo\hasil_img1.jpg"
 ```
-
----
 
 ## 6. Skenario Uji Ketahanan (Fault Tolerance Demo)
 

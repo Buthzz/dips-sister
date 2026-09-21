@@ -2,8 +2,6 @@
 
 **Mata Kuliah:** Sistem Terdistribusi (IF2228) · Program Studi Teknik Informatika · Universitas Trunojoyo Madura
 
----
-
 ## Tim Pengembang
 
 | No | Nama | NIM | Peran / Bidang Tanggung Jawab |
@@ -12,8 +10,6 @@
 | 2 | **Irma Annisatul Jannah** | 240411100014 | RPC Layer, Kontrak Protocol Buffers, & Failure Detector Heartbeat |
 | 3 | **Muhammad Fajar Nugroho** | 240411100103 | RESTful API Gateway, Persistensi Storage Atomik, & Config 12-Factor |
 | 4 | _(Menyusul)_ | — | Frontend Web Client & Pengujian Komparasi Citra |
-
----
 
 ## Ringkasan Eksekutif Sistem
 
@@ -30,8 +26,6 @@ flowchart LR
     Master -->|":9000 gRPC"| N2["Laptop 3: Node-2\n(Worker)"]
     Master -->|":9000 gRPC"| N3["Laptop 4: Node-3\n(Worker)"]
 ```
-
----
 
 ## Status Progres Proyek
 
@@ -52,8 +46,6 @@ flowchart LR
 
 > **Estimasi Progres Keseluruhan:** **~87%** (Seluruh fondasi backend, engine konkurensi, failure detector, dan dokumentasi akademik telah rampung 100% dan terverifikasi).
 
----
-
 ## Panduan Cepat Eksekusi (Windows PowerShell)
 
 ```powershell
@@ -68,8 +60,6 @@ go build -o dist\distapi.exe .\cmd\distapi
   --master=192.168.1.10:9000 --advertise=192.168.1.11:9000 --token=demo123
 ```
 
----
-
 ## Verifikasi Kualitas Kode (Quality Gate)
 
 Pastikan seluruh *quality gate* berikut berstatus hijau sebelum melakukan demonstrasi:
@@ -79,8 +69,6 @@ go build ./...       # Verifikasi kompilasi seluruh package
 go vet ./...         # Analisis statik bawaan Go (Wajib 0 warning)
 go test ./...        # Eksekusi seluruh rangkaian unit test (6 package PASS)
 ```
-
----
 
 ## Indeks Dokumentasi Mendalam (`docs/`)
 

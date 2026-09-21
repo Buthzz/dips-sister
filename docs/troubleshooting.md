@@ -2,8 +2,6 @@
 
 Dokumen ini menyajikan matriks mitigasi kegagalan pada lingkungan **Sistem Terdistribusi** yang berjalan secara *native* di sistem operasi **Windows 10 / 11**. Fokus utama diarahkan pada anomali jaringan lokal (LAN/WLAN), konkurensi I/O Windows, dan kegagalan parsial node.
 
----
-
 ## 1. Taksonomi Kegagalan Sistem Terdistribusi
 
 Dalam model sistem terdistribusi asinkron, distapi mengantisipasi kategori kegagalan berikut:
@@ -22,8 +20,6 @@ flowchart TD
     Failures --> Timing
 ```
 
----
-
 ## 2. Matriks Permasalahan dan Solusi Cepat
 
 | Kategori | Gejala / Pesan Error | Akar Masalah | Tindakan Perbaikan |
@@ -34,8 +30,6 @@ flowchart TD
 | **Filesystem** | `storage: rename gagal: ... Access is denied` | Windows memegang *mandatory file lock* pada file yang sedang dibuka | Sistem sudah memiliki built-in retry backoff; pastikan direktori memiliki izin *write* |
 | **Heartbeat** | Log master: `node dinyatakan mati` padahal laptop node masih menyala | Beban CPU 100% atau latensi Wi-Fi > 6 detik | Sesuaikan `--node-timeout=10s` dan `--heartbeat-interval=3s` |
 | **Payload** | `rpc error: code = ResourceExhausted desc = received message larger than max` | Gambar melebihi batas buffer gRPC | Upload dibatasi maksimal 5 MB/gambar; buffer internal diset 8 MB |
-
----
 
 ## 3. Prosedur Diagnostik & Solusi Mendalam
 
@@ -52,8 +46,6 @@ flowchart TD
      Test-NetConnection -ComputerName 192.168.43.10 -Port 9000
      ```
   5. Pastikan parameter `TcpTestSucceeded : True` muncul sebelum menjalankan node.
-
----
 
 ### Skenario B: Windows Defender Firewall Memblokir Port Masuk (Inbound Block)
 
@@ -73,8 +65,6 @@ flowchart TD
   ```powershell
   Get-NetFirewallRule -DisplayName "distapi*" | Format-Table DisplayName, Enabled, Direction, Action
   ```
-
----
 
 ### Skenario C: Konflik Alokasi Port (*Port Collision* / Zombie Process)
 
@@ -96,8 +86,6 @@ flowchart TD
   }
   ```
 
----
-
 ### Skenario D: Mandatory File Locking pada Windows NTFS
 
 * **Indikasi:** Log Master mencatat:
@@ -116,8 +104,6 @@ flowchart TD
      ```
   2. Pastikan direktori target `--data-dir` diletakkan di drive internal lokal (misal: `C:\Projects\dips-sister\data`), bukan di *Network Drive* atau folder sinkronisasi cloud (OneDrive / Google Drive).
 
----
-
 ### Skenario E: Deteksi Kematian Palsu (*False-Positive Dead Node*)
 
 * **Indikasi:** Node masih menyala dan aktif, tetapi Master mencatat `node dinyatakan mati, task dijadwalkan ulang`.
@@ -135,8 +121,6 @@ flowchart TD
   powercfg /change standby-timeout-ac 0
   ```
 
----
-
 ### Skenario F: Seluruh Node Worker Runtuh (*Total Cluster Failure*)
 
 * **Indikasi:** Seluruh laptop Node (2, 3, 4) mati atau terputus koneksinya secara bersamaan.
@@ -148,14 +132,12 @@ flowchart TD
 * **Verifikasi Operasional:**
   Klien tetap dapat melakukan request upload dan polling status. Task akan tetap berstatus `DONE` meskipun diproses lebih lambat secara lokal di laptop 1.
 
----
-
 ## 4. Skrip Pengecekan Kesehatan Pra-Demo (Pre-Flight Checklist)
 
 Simpan dan jalankan skrip PowerShell berikut di Laptop Master sebelum presentasi/demo:
 
 ```powershell
-Write-Host "=== PRE-FLIGHT CHECK DISTAPI (WINDOWS) ===" -ForegroundColor Cyan
+Write-Host "PRE-FLIGHT CHECK DISTAPI (WINDOWS)" -ForegroundColor Cyan
 
 # 1. Cek Kompiler Go
 $goVer = go version 2>$null
@@ -182,6 +164,4 @@ else { Write-Host "[OK] Port 8080 tersedia." -ForegroundColor Green }
 
 if ($p9000) { Write-Host "[WARN] Port 9000 sedang digunakan PID $($p9000.OwningProcess)" -ForegroundColor Yellow }
 else { Write-Host "[OK] Port 9000 tersedia." -ForegroundColor Green }
-
-Write-Host "==========================================" -ForegroundColor Cyan
 ```

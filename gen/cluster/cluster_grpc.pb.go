@@ -14,8 +14,7 @@ import (
 	status "google.golang.org/grpc/status"
 )
 
-// ─── Coordinator service (master side) ───────────────────────────────────────
-
+// Definisi service Coordinator (sisi master).
 const (
 	Coordinator_Register_FullMethodName  = "/cluster.Coordinator/Register"
 	Coordinator_Heartbeat_FullMethodName = "/cluster.Coordinator/Heartbeat"
@@ -118,9 +117,7 @@ var Coordinator_ServiceDesc = grpc.ServiceDesc{
 	Metadata: "proto/cluster.proto",
 }
 
-// ─── Worker service (node side) ───────────────────────────────────────────────
-
-// WorkerClient is the client API (used by master to call node).
+// Definisi service Worker (sisi node).
 type WorkerClient interface {
 	ProcessImage(ctx context.Context, in *ProcessRequest, opts ...grpc.CallOption) (*ProcessResponse, error)
 }

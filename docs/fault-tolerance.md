@@ -4,8 +4,6 @@ Toleransi kesalahan (*Fault Tolerance*) adalah karakteristik arsitektur yang mem
 
 Dokumen ini menguraikan model kegagalan, arsitektur pendeteksian kegagalan (*failure detector*), semantik eksekusi RPC, dan strategi mitigasi konkurensi pada `distapi`.
 
----
-
 ## 1. Model Kegagalan (Failure Model)
 
 Berdasarkan klasifikasi kegagalan terdistribusi (Cristian, 1991):
@@ -16,8 +14,6 @@ Berdasarkan klasifikasi kegagalan terdistribusi (Cristian, 1991):
 | **Crash-Recovery** | Node berhenti sementara, kemudian bergabung kembali | Laptop restart, adapter Wi-Fi reconnect | Generasi `SessionID` baru mendeteksi pemulihan node; node kembali masuk antrian scheduler |
 | **Omission Fault** | Pesan jaringan hilang atau di-drop buffer | Latensi paket tinggi pada Wi-Fi lokal | Batas waktu `task-timeout` (30s); mekanisme *automatic retry* hingga 3 kali |
 | **Crash Master (SPOF)** | Node koordinator tunggal mengalami kegagalan total | Laptop Master mati | Diakui sebagai *Single Point of Failure* dalam batasan desain tugas; state hilang karena disimpan *in-memory* |
-
----
 
 ## 2. Finite State Machine (FSM) Task
 
@@ -39,8 +35,6 @@ stateDiagram-v2
 2. **RUNNING → DONE:** Node worker mengembalikan payload hasil olahan gambar, dan Master berhasil melakukan operasi *atomic rename* pada sistem berkas lokal.
 3. **RUNNING → PENDING (Reschedule):** Terjadi jika koneksi jaringan putus, batas waktu 30 detik habis, atau heartbeat detector mengumumkan node pengemban task telah gugur (`StatusDead`). Counter `Retries` bertambah +1.
 4. **RUNNING → FAILED:** Ambang `max-retries` (default: 3) terlampaui. Task ditandai gagal permanen dan status Job agregat berubah menjadi `FAILED`.
-
----
 
 ## 3. Algoritma Failure Detector Berbasis Heartbeat
 
@@ -79,8 +73,6 @@ sequenceDiagram
 * **Node Timeout ($T_{timeout}$):** 6 detik ($3 \times T_h$).
 * **Rasionalitas:** Rasio $3:1$ memberikan toleransi terhadap $2$ kali paket heartbeat yang hilang (*transient network jitter*) sebelum Master mengambil keputusan drastis untuk mengeksekusi *failover* tugas.
 
----
-
 ## 4. Semantik Eksekusi: At-Least-Once & First-Result-Wins
 
 Pada sistem terdistribusi, komunikasi jaringan dapat menyebabkan skenario *slow node* (node masih bekerja namun Master menganggapnya mati karena heartbeat terlambat).
@@ -109,8 +101,6 @@ sequenceDiagram
 ### Prinsip Idempotensi & Atomic Write
 1. **Idempotensi Fungsi Pekerja:** Transformasi citra grayscale dan resizing pada `internal/worker` bersifat deterministik murni. Diberikan citra $I$ dan opsi $O$, output $f(I, O)$ selalu identik tanpa *side-effect*.
 2. **First-Result-Wins:** Master memeriksa `storage.ResultExists()` dan memanfaatkan jaminan atomisitas `os.Rename` pada sistem berkas NTFS. Tidak ada kondisi di mana berkas hasil olahan terpotong atau korup akibat balapan (*race condition*) dua node worker.
-
----
 
 ## 5. Degradasi Anggun (Graceful Degradation: Master-Local Processing)
 

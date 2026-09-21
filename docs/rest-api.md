@@ -2,8 +2,6 @@
 
 Dokumen ini mendefinisikan kontrak antarmuka eksternal (*External Client Interface*) dari node **Master**. Desain API mengikuti konvensi **RESTful Architecture** dengan identifikasi resource berbasis kata benda, pemanfaatan metode HTTP semantik, pemrosesan asinkron via status `202 Accepted`, dan format amplop error JSON yang seragam.
 
----
-
 ## 1. Daftar Endpoint Publik
 
 | Metode | Jalur URI | Deskripsi Operasional | Status Berhasil |
@@ -16,8 +14,6 @@ Dokumen ini mendefinisikan kontrak antarmuka eksternal (*External Client Interfa
 | `GET` | `/api/v1/jobs/{id}/results/{file}` | Mengunduh hasil olahan citra biner secara streaming | `200 OK` |
 | `GET` | `/api/v1/nodes` | Memeriksa topologi dan status kluster node | `200 OK` |
 
----
-
 ## 2. Rincian dan Contoh Permintaan
 
 ### `GET /healthz`
@@ -29,8 +25,6 @@ Pemeriksaan ketersediaan layanan Master tanpa dependensi jaringan eksternal.
     "status": "ok"
   }
   ```
-
----
 
 ### `POST /api/v1/jobs`
 Menerima kumpulan berkas citra mentah untuk didistribusikan ke kluster worker.
@@ -62,8 +56,6 @@ Menerima kumpulan berkas citra mentah untuk didistribusikan ke kluster worker.
   }
   ```
 
----
-
 ### `GET /api/v1/jobs`
 Mengambil ringkasan seluruh job yang tersimpan di memori Master, diurutkan dari yang terbaru.
 
@@ -80,8 +72,6 @@ Mengambil ringkasan seluruh job yang tersimpan di memori Master, diurutkan dari 
     }
   ]
   ```
-
----
 
 ### `GET /api/v1/jobs/{id}`
 Memeriksa status siklus hidup job dan rincian alokasi setiap task pada node worker.
@@ -119,8 +109,6 @@ Memeriksa status siklus hidup job dan rincian alokasi setiap task pada node work
   }
   ```
 
----
-
 ### `GET /api/v1/jobs/{id}/results/{file}`
 Mengunduh berkas biner hasil pemrosesan citra secara langsung.
 
@@ -136,14 +124,10 @@ Mengunduh berkas biner hasil pemrosesan citra secara langsung.
     -OutFile "C:\hasil_foto1.jpg"
   ```
 
----
-
 ### `DELETE /api/v1/jobs/{id}`
 Membatalkan job yang sedang berjalan dan menghapus direktori berkas terkait secara permanen dari storage Master.
 
 * **Response `204 No Content`** (Badan respons kosong).
-
----
 
 ### `GET /api/v1/nodes`
 Memeriksa status liveness seluruh node yang pernah mendaftar pada Registry Master.
@@ -169,8 +153,6 @@ Memeriksa status liveness seluruh node yang pernah mendaftar pada Registry Maste
     }
   ]
   ```
-
----
 
 ## 3. Format Respons Kesalahan (Error Envelope)
 

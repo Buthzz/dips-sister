@@ -4,8 +4,6 @@ Dalam rekayasa sistem terdistribusi, **Naming System** bertanggung jawab untuk m
 
 Dokumen ini menjelaskan implementasi pendekatan **Home-Based Naming** pada `distapi` serta integrasinya dengan pendeteksian kegagalan node.
 
----
-
 ## 1. Taksonomi Naming: Pendekatan Home-Based
 
 Berdasarkan literatur sistem terdistribusi (Coulouris et al.; Tanenbaum & Van Steen), terdapat tiga paradigma utama penamaan:
@@ -39,16 +37,12 @@ sequenceDiagram
     Sched->>Node: gRPC ProcessImage() to 192.168.1.11:9000
 ```
 
----
-
 ## 2. Flat Naming vs Structured Naming
 
 `distapi` memilih skema **Flat Naming** (nama tidak hierarkis):
 * **Karakteristik:** Nama logis node (`node-1`, `node-2`, `laptop-fajar`) adalah string atomik tanpa struktur domain (bukan `node-1.region.dc.local`).
 * **Keuntungan:** Tidak ada overhead parsing jalur direktori atau delegasi resolusi bertingkat; operasi resolusi berlangsung secara konstan $O(1)$ di dalam tabel hash memori Master.
 * **Trade-off:** Memerlukan entitas terpusat (Master) untuk menjaga konsistensi direktori.
-
----
 
 ## 3. Penanganan Mutasi Alamat & Stale Session
 
@@ -73,8 +67,6 @@ Ketika sebuah node mengalami *crash* dan dihidupkan kembali, kemungkinan besar s
 2. Pada saat RPC `Register` masuk ke Master:
    * Jika `NodeID` cocok dan `SessionID` identik: Master hanya memperbarui cap waktu dan alamat jaringan (rekonsiliasi transien).
    * Jika `NodeID` cocok namun `SessionID` berbeda: Master menyimpulkan bahwa node telah melakukan *reboot*. Koneksi lama di-close secara paksa dan seluruh metadata node diperbarui dari nol.
-
----
 
 ## 4. Keamanan Thread & Skalabilitas Resolusi
 

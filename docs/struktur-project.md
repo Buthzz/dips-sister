@@ -2,37 +2,33 @@
 
 Dokumen ini membedah arsitektur kode sumber `distapi`, tanggung jawab setiap package, prinsip desain yang diadopsi, serta batasan ketergantungan (*dependency hierarchy*).
 
----
-
 ## 1. Tata Letak Direktori (Standard Go Project Layout)
 
-```
+```text
 distapi/
-├── cmd/
-│   └── distapi/
-│       └── main.go                 # Titik masuk runtime, kompilasi binary, & koordinasi graceful shutdown
-├── proto/
-│   └── cluster.proto               # Kontrak formal interface IDL Protocol Buffers v3
-├── gen/
-│   └── cluster/
-│       ├── cluster.pb.go           # Struct data Protobuf yang di-generate / hand-crafted
-│       └── cluster_grpc.pb.go      # Service interface Coordinator & Worker gRPC
-├── internal/                       # Domain internal terlindungi (hanya bisa diakses modul distapi)
-│   ├── config/                     # Evaluasi konfigurasi fail-fast (Flag > Env > Default)
-│   ├── storage/                    # Abstraksi persistensi file lokal berbasis Atomic Write
-│   ├── registry/                   # Home-Based Naming Service & Heartbeat Failure Detector
-│   ├── worker/                     # Logika murni pemrosesan citra digital (Stateless)
-│   ├── scheduler/                  # Algoritma orkestrasi Scatter-Gather & penjadwalan ulang
-│   ├── rpc/                        # Server & Client gRPC, Interceptor Autentikasi Token
-│   └── api/                        # RESTful API Gateway (Go 1.22+ Standard Mux)
-├── docs/                           # Dokumentasi mendalam prinsip Sistem Terdistribusi
-├── Makefile                        # Automation tooling untuk environment Windows PowerShell / CMD
-├── go.mod                          # Definisi modul dan dependensi eksternal
-├── go.sum                          # Checksum verifikasi integritas dependensi
-└── README.md                       # Rangkuman eksekutif, identitas tim, & tautan panduan
+  cmd/
+    distapi/
+      main.go               # Titik masuk runtime, kompilasi binary, & koordinasi graceful shutdown
+  proto/
+    cluster.proto           # Kontrak formal interface IDL Protocol Buffers v3
+  gen/
+    cluster/
+      cluster.pb.go         # Struct data Protobuf yang di-generate / hand-crafted
+      cluster_grpc.pb.go    # Service interface Coordinator & Worker gRPC
+  internal/                 # Domain internal terlindungi (hanya bisa diakses modul distapi)
+    config/                 # Evaluasi konfigurasi fail-fast (Flag > Env > Default)
+    storage/                # Abstraksi persistensi file lokal berbasis Atomic Write
+    registry/               # Home-Based Naming Service & Heartbeat Failure Detector
+    worker/                 # Logika murni pemrosesan citra digital (Stateless)
+    scheduler/              # Algoritma orkestrasi Scatter-Gather & penjadwalan ulang
+    rpc/                    # Server & Client gRPC, Interceptor Autentikasi Token
+    api/                    # RESTful API Gateway (Go 1.22+ Standard Mux)
+  docs/                     # Dokumentasi mendalam prinsip Sistem Terdistribusi
+  Makefile                  # Automation tooling untuk environment Windows PowerShell / CMD
+  go.mod                    # Definisi modul dan dependensi eksternal
+  go.sum                    # Checksum verifikasi integritas dependensi
+  README.md                 # Rangkuman eksekutif, identitas tim, & tautan panduan
 ```
-
----
 
 ## 2. Diagram Hirarki & Ketergantungan Modul
 
@@ -74,8 +70,6 @@ flowchart TD
 ```
 
 > **Catatan Kritis Arsitektural:** `internal/scheduler` mendefinisikan antarmuka `NodeClient` secara mandiri. Package scheduler sama sekali tidak mengimpor `internal/rpc`. Adapter konkret yang mengimplementasikan pemanggilan jaringan gRPC berada pada `internal/rpc/nodeclient.go`. Ini menjamin scheduler dapat diuji (*mocking*) secara independen tanpa memicu koneksi socket nyata.
-
----
 
 ## 3. Rincian Tanggung Jawab Package
 
