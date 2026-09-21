@@ -12,8 +12,8 @@ data/
 # Node.js (frontend dependencies — install with npm ci)
 web/node_modules/
 
-# Frontend build output (committed only if needed; build from source)
-# web/dist/    # Uncomment if you want to commit built assets
+# Frontend build output — DI-COMMIT agar `go build` berjalan tanpa Node.js
+# (konsisten dengan kebijakan gen/). Regenerasi lewat `make web`.
 
 # IDE
 .idea/

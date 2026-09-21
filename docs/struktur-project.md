@@ -23,6 +23,10 @@ distapi/
     scheduler/              # Algoritma orkestrasi Scatter-Gather & penjadwalan ulang
     rpc/                    # Server & Client gRPC, Interceptor Autentikasi Token
     api/                    # RESTful API Gateway (Go 1.22+ Standard Mux)
+  web/                      # Frontend Vue 3 + Vite
+    embed.go                # //go:embed semua aset web/dist ke biner (single binary)
+    src/                    # Kode sumber Vue (main.js, App.vue, components/, api.js)
+    dist/                   # Hasil build Vite — DI-COMMIT agar `go build` tanpa Node.js
   docs/                     # Dokumentasi mendalam prinsip Sistem Terdistribusi
   Makefile                  # Automation tooling untuk environment Windows PowerShell / CMD
   go.mod                    # Definisi modul dan dependensi eksternal
@@ -129,3 +133,4 @@ flowchart TD
   - Melayani 7 endpoint RESTful API berbasis router native Go 1.22+ (`http.NewServeMux`).
   - Mengembalikan status `202 Accepted` untuk pemrosesan asinkron (klien melakukan *polling*).
   - Streaming berkas hasil langsung dari disk ke response writer HTTP dengan konsumsi memori konstan ($O(1)$ memory streaming).
+  - Menyajikan antarmuka web Vue (hasil build `web/dist` yang di-embed via package `distapi/web`) pada akar path `/`, sehingga satu biner berisi API dan UI.

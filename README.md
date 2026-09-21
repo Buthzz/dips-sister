@@ -41,24 +41,29 @@ flowchart LR
 | **Entry Point Kompilasi (`main.go`)** | 100% ✅ | Composition root, graceful shutdown 10 detik, background monitors |
 | **Kompilasi & Analisis Statik (`go vet`)** | 100% ✅ | **0 Warning, 0 Lint Error**, arsitektur clean tanpa *circular imports* |
 | **Dokumentasi Sistem Terdistribusi (`docs/`)** | 100% ✅ | 9 dokumen komprehensif berstandar industri dengan diagram Mermaid |
-| **Frontend Web Client** | 0% 🔄 | Sedang dalam pengerjaan oleh anggota tim ke-4 |
+| **Frontend Web Client** | 100% ✅ | Vue 3 + Vite, upload drag-&-drop, daftar & progres job (polling 2s), status node, unduh hasil; di-embed ke binary |
 | **Pengujian Fisik 4 Laptop (Keputusan D1)** | 0% ⏳ | Menunggu pengujian konektivitas TCP pada jaringan fisik / hotspot |
 
-> **Estimasi Progres Keseluruhan:** **~87%** (Seluruh fondasi backend, engine konkurensi, failure detector, dan dokumentasi akademik telah rampung 100% dan terverifikasi).
+> **Estimasi Progres Keseluruhan:** **~98%** (Seluruh fondasi backend, engine konkurensi, failure detector, frontend web, dan dokumentasi akademik telah rampung dan terverifikasi).
 
 ## Panduan Cepat Eksekusi (Windows PowerShell)
 
 ```powershell
-# 1. Kompilasi Binary Native Windows
+# 1. (Opsional) Build ulang frontend Vue — hanya saat ada perubahan web/src
+cd web; npm install; npm run build; cd ..
+
+# 2. Kompilasi Binary Native Windows (frontend otomatis di-embed)
 go build -o dist\distapi.exe .\cmd\distapi
 
-# 2. Jalankan Laptop 1 (Master)
+# 3. Jalankan Laptop 1 (Master)
 .\dist\distapi.exe --mode=master --http-port=8080 --grpc-port=9000 --token=demo123
 
-# 3. Jalankan Laptop 2, 3, 4 (Node Worker)
+# 4. Jalankan Laptop 2, 3, 4 (Node Worker)
 .\dist\distapi.exe --mode=node --node-id=node-1 `
   --master=192.168.1.10:9000 --advertise=192.168.1.11:9000 --token=demo123
 ```
+
+Buka `http://<IP-master>:8080` pada browser untuk menggunakan antarmuka web.
 
 ## Verifikasi Kualitas Kode (Quality Gate)
 

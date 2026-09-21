@@ -1,4 +1,4 @@
-.PHONY: build test vet check proto clean run-master
+.PHONY: build test vet check proto clean run-master run-web web
 
 # Direktori output binary
 DIST := dist
@@ -7,8 +7,12 @@ CMD  := ./cmd/distapi
 # Target default: vet + test + build
 all: check build
 
-# Build binary untuk Windows (platform saat ini)
-build:
+# Build output frontend Vue (butuh Node.js dengan npm)
+web:
+	cd web && npm install && npm run build
+
+# Build binary untuk Windows (platform saat ini) — frontend di-embed ke binary
+build: web
 	go build -o $(DIST)\distapi.exe $(CMD)
 
 # Jalankan semua unit test
@@ -33,6 +37,10 @@ proto:
 run-master:
 	go run $(CMD) --mode=master --http-port=8080 --grpc-port=9000 ^
 		--token=demo123 --log-level=debug
+
+# Jalankan Vite dev server (proxy /api => http://localhost:8080)
+run-web:
+	cd web && npm install && npm run dev
 
 # Jalankan node lokal (ganti MASTER_IP jika beda mesin)
 # Contoh: NODE_ID=node-1 MASTER_IP=192.168.1.10 make run-node

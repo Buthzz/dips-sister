@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"distapi/internal/registry"
 	"distapi/internal/scheduler"
 	"distapi/internal/storage"
+	webui "distapi/web"
 )
 
 // Handler mengelola routing dan dispatch request HTTP.
@@ -59,6 +61,32 @@ func (h *Handler) daftarkanRoute() {
 	h.mux.HandleFunc("DELETE /api/v1/jobs/{id}", h.handleHapusJob)
 	h.mux.HandleFunc("GET /api/v1/jobs/{id}/results/{file}", h.handleUnduhHasil)
 	h.mux.HandleFunc("GET /api/v1/nodes", h.handleListNode)
+	h.daftarkanFrontend()
+}
+
+// daftarkanFrontend menyajikan aset statis Vue yang di-embed ke binary.
+func (h *Handler) daftarkanFrontend() {
+	sub, err := fs.Sub(webui.Dist, "dist")
+	if err != nil {
+		h.log.Error("aset frontend tidak tersedia",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	h.mux.Handle("GET /assets/",
+		http.FileServer(http.FS(sub)))
+	h.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		nama := strings.TrimPrefix(r.URL.Path, "/")
+		if nama == "" {
+			nama = "index.html"
+		}
+		if f, err := sub.Open(nama); err != nil {
+			nama = "index.html"
+		} else {
+			f.Close()
+		}
+		http.ServeFileFS(w, r, sub, nama)
+	})
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
