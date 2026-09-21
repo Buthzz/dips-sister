@@ -1,8 +1,3 @@
-// Package api — tes integrasi untuk semua endpoint REST.
-//
-// Menggunakan httptest.NewRecorder dan httptest.NewRequest untuk menguji
-// handler tanpa perlu server HTTP nyata. Pola ini memungkinkan tes
-// jalankan dalam hitungan milidetik tanpa binding port.
 package api
 
 import (

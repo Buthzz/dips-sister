@@ -1,7 +1,3 @@
-// Package scheduler — tes unit untuk logika scatter-gather dan manajemen job.
-//
-// Menggunakan mockNodeClient untuk mengisolasi scheduler dari jaringan,
-// memungkinkan tes berjalan cepat dan deterministik tanpa koneksi gRPC.
 package scheduler
 
 import (

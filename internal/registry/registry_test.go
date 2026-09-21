@@ -1,4 +1,3 @@
-// Package registry — tes unit untuk home-based naming dan deteksi node mati.
 package registry
 
 import (

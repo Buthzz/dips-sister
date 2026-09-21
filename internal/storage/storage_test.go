@@ -1,7 +1,3 @@
-// Package storage — tes unit untuk operasi penyimpanan file.
-//
-// Semua tes menggunakan direktori sementara (t.TempDir) yang dihapus
-// otomatis setelah tes selesai, sehingga tidak meninggalkan file di disk.
 package storage
 
 import (

@@ -1,12 +1,3 @@
-// nodeclient.go menjembatani antarmuka scheduler.NodeClient dengan panggilan gRPC nyata.
-//
-// Berada di package rpc (bukan scheduler) agar bisa mengimpor gen/cluster
-// tanpa menciptakan dependency cycle (scheduler → rpc → scheduler).
-//
-// Pola fallback "master-local":
-//   - Jika semua node mati, scheduler memilih "master-local" sebagai target
-//   - NodeClientAdapter menangani kasus ini dengan memanggil WorkerServer secara in-process
-//   - Ini implementasi graceful degradation sesuai DESIGN.md §7.5
 package rpc
 
 import (
@@ -20,21 +11,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-// NodeClientAdapter mengimplementasikan scheduler.NodeClient menggunakan gRPC nyata.
-// Koneksi di-cache berdasarkan nodeID untuk menghindari overhead handshake berulang.
-//
-// Manajemen koneksi:
-//   - SetConn dipanggil saat node berhasil Register (dari registrationHook di main)
-//   - UpdateAddr dipanggil jika alamat node berubah (misalnya setelah restart)
-//   - Close menutup semua koneksi saat binary berhenti (graceful shutdown)
+// NodeClientAdapter mengadaptasi antarmuka scheduler.NodeClient ke pemanggilan gRPC.
 type NodeClientAdapter struct {
 	token string
-
 	mu    sync.Mutex
-	conns map[string]*grpc.ClientConn // kunci: nodeID
+	conns map[string]*grpc.ClientConn
 }
 
-// NewNodeClientAdapter membuat adapter baru dengan token autentikasi.
+// NewNodeClientAdapter membuat adapter client baru.
 func NewNodeClientAdapter(token string) *NodeClientAdapter {
 	return &NodeClientAdapter{
 		token: token,
@@ -42,8 +26,7 @@ func NewNodeClientAdapter(token string) *NodeClientAdapter {
 	}
 }
 
-// ProcessImage mengirimkan request ProcessImage ke node yang ditentukan.
-// Jika nodeID adalah "master-local", pemrosesan dilakukan in-process tanpa jaringan.
+// ProcessImage mengirimkan tugas pemrosesan ke node via gRPC atau fallback lokal.
 func (a *NodeClientAdapter) ProcessImage(
 	ctx context.Context,
 	nodeID string,
@@ -74,14 +57,12 @@ func (a *NodeClientAdapter) ProcessImage(
 		return nil, fmt.Errorf("rpc: ProcessImage ke %s gagal: %w", nodeID, err)
 	}
 	if !resp.GetSuccess() {
-		// Worker mengembalikan error proses (bukan error jaringan) — scheduler akan retry.
 		return nil, fmt.Errorf("rpc: worker %s gagal: %s", nodeID, resp.GetError())
 	}
 	return resp.GetResultData(), nil
 }
 
-// SetConn mendaftarkan atau mengganti koneksi untuk node tertentu.
-// Koneksi lama ditutup sebelum diganti untuk mencegah kebocoran resource.
+// SetConn mendaftarkan atau mengganti koneksi client untuk node tertentu.
 func (a *NodeClientAdapter) SetConn(nodeID string, conn *grpc.ClientConn) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -91,7 +72,7 @@ func (a *NodeClientAdapter) SetConn(nodeID string, conn *grpc.ClientConn) {
 	a.conns[nodeID] = conn
 }
 
-// Close menutup semua koneksi yang di-cache. Dipanggil saat shutdown.
+// Close menutup seluruh koneksi gRPC yang tersimpan.
 func (a *NodeClientAdapter) Close() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -101,22 +82,16 @@ func (a *NodeClientAdapter) Close() {
 	a.conns = make(map[string]*grpc.ClientConn)
 }
 
-// ambilKoneksi mengembalikan koneksi yang sudah di-cache untuk nodeID.
-// Koneksi harus sudah ada sebelumnya (didaftarkan via SetConn saat Register).
-// Jika belum ada, kemungkinan node belum selesai Register — scheduler akan retry.
 func (a *NodeClientAdapter) ambilKoneksi(nodeID string) (*grpc.ClientConn, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	conn, ok := a.conns[nodeID]
 	if !ok {
-		return nil, fmt.Errorf("rpc: belum ada koneksi ke %s (node mungkin belum register)", nodeID)
+		return nil, fmt.Errorf("rpc: belum ada koneksi ke %s", nodeID)
 	}
 	return conn, nil
 }
 
-// prosesLokal menjalankan pemrosesan gambar secara in-process menggunakan WorkerServer.
-// Digunakan sebagai fallback saat semua node mati — master bekerja sendiri.
-// Ini memastikan sistem tetap berfungsi meski dalam kondisi degradasi.
 func (a *NodeClientAdapter) prosesLokal(
 	task *scheduler.Task,
 	imageData []byte,

@@ -1,14 +1,4 @@
-// Package rpc menyediakan server dan client gRPC untuk komunikasi antar node kluster.
-//
-// Pola komunikasi (DESIGN.md §5.3):
-//   - Coordinator server berjalan di master; dipanggil node untuk Register dan Heartbeat
-//   - Worker server berjalan di setiap node; dipanggil master untuk ProcessImage
-//   - Kedua arah komunikasi diamankan dengan shared token via gRPC metadata
-//
-// Pemilihan gRPC (vs REST untuk internal):
-//   - Binary encoding Protocol Buffers lebih efisien untuk payload gambar besar
-//   - Strongly-typed interface mengurangi risiko kesalahan serialisasi
-//   - Mendukung deadline propagation secara native via context
+// Package rpc mengelola komunikasi gRPC antar-node dan master.
 package rpc
 
 import (
@@ -28,13 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// tokenMetaKey adalah kunci metadata gRPC untuk shared cluster token.
-// Menggunakan lowercase sesuai konvensi gRPC metadata (case-insensitive di HTTP/2).
 const tokenMetaKey = "x-cluster-token"
 
-// UnaryTokenClientInterceptor menyisipkan token ke setiap RPC keluar (outgoing).
-// Dipasang sebagai dial option agar setiap panggilan otomatis terauthentikasi
-// tanpa harus ingat menyisipkan token secara manual di setiap call site.
+// UnaryTokenClientInterceptor menyisipkan shared token ke metadata RPC keluar.
 func UnaryTokenClientInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -49,9 +35,7 @@ func UnaryTokenClientInterceptor(token string) grpc.UnaryClientInterceptor {
 	}
 }
 
-// UnaryTokenServerInterceptor memvalidasi token pada setiap RPC masuk (incoming).
-// Jika token tidak ada atau salah, request ditolak dengan status Unauthenticated
-// sebelum menyentuh logika handler — prinsip defense-in-depth.
+// UnaryTokenServerInterceptor memvalidasi shared token dari metadata RPC masuk.
 func UnaryTokenServerInterceptor(token string) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
@@ -61,31 +45,29 @@ func UnaryTokenServerInterceptor(token string) grpc.UnaryServerInterceptor {
 	) (any, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			return nil, status.Error(codes.Unauthenticated, "metadata tidak ada")
+			return nil, status.Error(codes.Unauthenticated, "metadata tidak ditemukan")
 		}
 		vals := md.Get(tokenMetaKey)
 		if len(vals) == 0 || vals[0] != token {
-			return nil, status.Error(codes.Unauthenticated, "token kluster tidak valid")
+			return nil, status.Error(codes.Unauthenticated, "token tidak valid")
 		}
 		return handler(ctx, req)
 	}
 }
 
-// CoordinatorServer mengimplementasikan service Coordinator (sisi master).
-// Node memanggil Register saat pertama kali terhubung, lalu Heartbeat secara periodik.
+// CoordinatorServer mengimplementasikan gRPC service Coordinator pada master.
 type CoordinatorServer struct {
 	cluster.UnimplementedCoordinatorServer
 	reg *registry.Registry
 	log *slog.Logger
 }
 
-// NewCoordinatorServer membuat server Coordinator yang didukung registry tertentu.
+// NewCoordinatorServer membuat instance CoordinatorServer baru.
 func NewCoordinatorServer(reg *registry.Registry, log *slog.Logger) *CoordinatorServer {
 	return &CoordinatorServer{reg: reg, log: log}
 }
 
-// Register menerima pendaftaran dari node dan mencatatnya ke registry.
-// Selalu mengembalikan accepted=true; penolakan tidak diimplementasikan saat ini.
+// Register menerima permintaan pendaftaran dari worker node.
 func (s *CoordinatorServer) Register(_ context.Context, req *cluster.RegisterRequest) (*cluster.RegisterResponse, error) {
 	s.log.Info("RPC Register diterima",
 		slog.String("node_id", req.GetNodeId()),
@@ -101,28 +83,24 @@ func (s *CoordinatorServer) Register(_ context.Context, req *cluster.RegisterReq
 	return &cluster.RegisterResponse{Accepted: ok, Message: "ok"}, nil
 }
 
-// Heartbeat mencatat waktu hidup node terakhir dan jumlah task aktifnya.
-// Jika heartbeat ditolak (sesi tidak cocok), node harus melakukan Register ulang.
+// Heartbeat menerima sinyal detak jantung dari worker node.
 func (s *CoordinatorServer) Heartbeat(_ context.Context, req *cluster.HeartbeatRequest) (*cluster.HeartbeatResponse, error) {
 	ok := s.reg.Heartbeat(req.GetNodeId(), req.GetSessionId(), int(req.GetActiveTasks()))
 	if !ok {
 		s.log.Warn("heartbeat ditolak",
 			slog.String("node_id", req.GetNodeId()),
-			slog.String("alasan", "node tidak dikenal atau sesi kadaluarsa"))
+			slog.String("alasan", "node tidak terdaftar atau sesi kedaluwarsa"))
 	}
 	return &cluster.HeartbeatResponse{Ok: ok}, nil
 }
 
-// WorkerServer mengimplementasikan service Worker (sisi node).
-// Master memanggil ProcessImage untuk setiap task dalam job scatter-gather.
-// Server ini juga berjalan di master untuk menangani "master-local" processing
-// saat tidak ada node yang tersedia (graceful degradation).
+// WorkerServer mengimplementasikan gRPC service Worker pada node.
 type WorkerServer struct {
 	cluster.UnimplementedWorkerServer
 	log *slog.Logger
 }
 
-// NewWorkerServer membuat WorkerServer. Logger boleh nil jika dipakai secara lokal.
+// NewWorkerServer membuat instance WorkerServer baru.
 func NewWorkerServer(log *slog.Logger) *WorkerServer {
 	if log == nil {
 		log = slog.Default()
@@ -130,9 +108,7 @@ func NewWorkerServer(log *slog.Logger) *WorkerServer {
 	return &WorkerServer{log: log}
 }
 
-// ProcessImage menerima gambar mentah, memproses sesuai parameter, dan mengembalikan hasilnya.
-// Error dari worker.Process dikembalikan sebagai response dengan success=false
-// (bukan gRPC error) agar scheduler dapat membedakan "gagal proses" vs "gagal jaringan".
+// ProcessImage mengeksekusi transformasi citra yang ditugaskan oleh master.
 func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessRequest) (*cluster.ProcessResponse, error) {
 	mulai := time.Now()
 	s.log.Info("mulai ProcessImage",
@@ -173,9 +149,7 @@ func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessReque
 	}, nil
 }
 
-// NewGRPCServer membuat gRPC server dengan interceptor token dan batas ukuran pesan 8 MB.
-// Batas 8 MB dipilih untuk mengakomodasi gambar hingga 5 MB (max upload) ditambah
-// overhead enkoding dan metadata protobuf.
+// NewGRPCServer membuat gRPC server terkonfigurasi dengan interceptor token.
 func NewGRPCServer(token string) *grpc.Server {
 	return grpc.NewServer(
 		grpc.UnaryInterceptor(UnaryTokenServerInterceptor(token)),
@@ -184,9 +158,7 @@ func NewGRPCServer(token string) *grpc.Server {
 	)
 }
 
-// ServeGRPC memulai server gRPC di port yang ditentukan dan menunggu ctx selesai.
-// Ketika ctx dibatalkan (misal Ctrl+C), server di-stop secara graceful —
-// request yang sedang berjalan dibiarkan selesai sebelum server benar-benar berhenti.
+// ServeGRPC menjalankan server gRPC hingga context selesai.
 func ServeGRPC(ctx context.Context, srv *grpc.Server, port int, log *slog.Logger) error {
 	addr := fmt.Sprintf(":%d", port)
 	lis, err := net.Listen("tcp", addr)
@@ -205,7 +177,6 @@ func ServeGRPC(ctx context.Context, srv *grpc.Server, port int, log *slog.Logger
 
 	select {
 	case <-ctx.Done():
-		// Context selesai (SIGINT/SIGTERM) — graceful stop agar task aktif bisa selesai.
 		srv.GracefulStop()
 		return nil
 	case err := <-errCh:
@@ -213,12 +184,11 @@ func ServeGRPC(ctx context.Context, srv *grpc.Server, port int, log *slog.Logger
 	}
 }
 
-// DialNode membuka koneksi gRPC ke node dengan interceptor token dan batas pesan 8 MB.
-// Koneksi ini di-cache oleh NodeClientAdapter untuk menghindari overhead dial berulang.
+// DialNode membuat koneksi gRPC klien ke alamat target dengan interceptor token.
 func DialNode(addr, token string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		addr,
-		grpc.WithInsecure(), //nolint:staticcheck // TLS ditambahkan pada iterasi berikutnya (DESIGN.md §13.4)
+		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(UnaryTokenClientInterceptor(token)),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(8*1024*1024),

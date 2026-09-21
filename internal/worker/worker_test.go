@@ -1,7 +1,3 @@
-// Package worker — tes unit untuk logika pemrosesan gambar.
-//
-// Semua tes bersifat deterministic dan tidak membutuhkan jaringan atau disk.
-// Gunakan pola table-driven agar mudah menambah kasus baru tanpa duplikasi kode.
 package worker
 
 import (

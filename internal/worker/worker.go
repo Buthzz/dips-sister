@@ -1,9 +1,4 @@
-// Package worker menyediakan logika pemrosesan gambar yang murni dan stateless.
-//
-// Package ini sengaja tidak memiliki dependensi jaringan supaya bisa diuji
-// secara mandiri tanpa koneksi ke master maupun node lain. Semua fungsi bersifat
-// deterministik: input yang sama selalu menghasilkan output yang sama (idempoten),
-// properti penting untuk semantik at-least-once execution di DESIGN.md §7.
+// Package worker menyediakan fungsi pemrosesan citra digital secara stateless.
 package worker
 
 import (
@@ -16,39 +11,22 @@ import (
 	"strings"
 )
 
-// init mendaftarkan decoder JPEG dan PNG ke registry image.Decode.
-// Tanpa baris ini, image.Decode tidak akan mengenali format tersebut
-// karena Go menggunakan registrasi eksplisit untuk format gambar.
 func init() {
 	_ = jpeg.Decode
 	_ = png.Decode
 }
 
-// Options menentukan transformasi apa yang diterapkan pada gambar.
-// Nilai nol (zero value) berarti tidak ada transformasi — gambar hanya
-// di-decode lalu di-encode ulang.
+// Options menentukan parameter transformasi citra.
 type Options struct {
-	// ResizeWidth dan ResizeHeight menentukan dimensi maksimum hasil resize.
-	// Jika hanya satu yang diset, dimensi lain dihitung otomatis agar
-	// rasio aspek terjaga. Nilai 0 berarti dimensi itu tidak dibatasi.
 	ResizeWidth  int
 	ResizeHeight int
-
-	// Grayscale mengubah gambar menjadi hitam-putih menggunakan formula luminansi.
-	Grayscale bool
+	Grayscale    bool
 }
 
-// Process adalah fungsi utama package ini. Ia menerima byte gambar mentah,
-// menerapkan transformasi sesuai Options, lalu mengembalikan byte gambar hasil.
-// Format output sama dengan format input (JPEG tetap JPEG, PNG tetap PNG).
-//
-// Error dikembalikan jika:
-//   - imageData kosong
-//   - format gambar tidak dikenali atau rusak
-//   - encoding hasil gagal (sangat jarang, biasanya karena OOM)
+// Process memproses data citra biner sesuai opsi dan mengembalikan hasilnya.
 func Process(imageData []byte, filename string, opts Options) ([]byte, error) {
 	if len(imageData) == 0 {
-		return nil, fmt.Errorf("worker: data gambar kosong")
+		return nil, fmt.Errorf("worker: data citra kosong")
 	}
 
 	img, format, err := image.Decode(bytes.NewReader(imageData))
@@ -81,9 +59,7 @@ func Process(imageData []byte, filename string, opts Options) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// DetectFormat mendeteksi format gambar dari ekstensi nama file.
-// Mengembalikan "jpeg" atau "png"; string kosong jika tidak dikenali.
-// Fungsi ini hanya untuk labelling UI — proses decode tidak bergantung padanya.
+// DetectFormat mengenali format citra berdasarkan ekstensi berkas.
 func DetectFormat(filename string) string {
 	lower := strings.ToLower(filename)
 	switch {
@@ -95,11 +71,7 @@ func DetectFormat(filename string) string {
 	return ""
 }
 
-// resize mengecilkan gambar agar muat di dalam kotak maxW × maxH
-// dengan menjaga rasio aspek. Algoritma nearest-neighbour dipilih karena
-// cepat dan cukup untuk demo; bisa diganti Lanczos jika kualitas perlu lebih baik.
-//
-// Jika hanya satu dimensi yang diset (>0), dimensi lain dihitung proporsional.
+// resize mengubah dimensi citra dengan mempertahankan rasio aspek asli (nearest-neighbour).
 func resize(img image.Image, maxW, maxH int) image.Image {
 	src := img.Bounds()
 	srcW := src.Dx()
@@ -111,7 +83,6 @@ func resize(img image.Image, maxW, maxH int) image.Image {
 
 	dstW, dstH := maxW, maxH
 
-	// Hitung dimensi yang belum diset berdasarkan rasio aspek.
 	if dstW <= 0 {
 		dstW = srcW * dstH / srcH
 	}
@@ -119,7 +90,6 @@ func resize(img image.Image, maxW, maxH int) image.Image {
 		dstH = srcH * dstW / srcW
 	}
 
-	// Pilih skala yang lebih kecil agar gambar tidak keluar dari kotak.
 	scaleW := float64(dstW) / float64(srcW)
 	scaleH := float64(dstH) / float64(srcH)
 	scale := scaleW
@@ -133,7 +103,6 @@ func resize(img image.Image, maxW, maxH int) image.Image {
 	out := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 	for y := range dstH {
 		for x := range dstW {
-			// Petakan piksel output ke piksel input menggunakan skala terbalik.
 			srcX := x * srcW / dstW
 			srcY := y * srcH / dstH
 			out.Set(x, y, img.At(src.Min.X+srcX, src.Min.Y+srcY))
@@ -142,9 +111,7 @@ func resize(img image.Image, maxW, maxH int) image.Image {
 	return out
 }
 
-// toGrayscale mengonversi setiap piksel ke nilai abu-abu menggunakan
-// model warna bawaan Go yang menerapkan formula luminansi standar ITU-R BT.601:
-// Y = 0.299R + 0.587G + 0.114B
+// toGrayscale mengonversi piksel citra ke grayscale menggunakan model ITU-R BT.601.
 func toGrayscale(img image.Image) image.Image {
 	bounds := img.Bounds()
 	out := image.NewGray(bounds)

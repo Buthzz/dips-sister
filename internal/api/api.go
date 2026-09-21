@@ -1,14 +1,4 @@
-// Package api mengimplementasikan REST API publik untuk node master.
-//
-// Desain REST (DESIGN.md §5.1 — RESTful API, Slide 06):
-//   - Resource berbasis kata benda (jobs, nodes), method HTTP sesuai semantik
-//   - POST /api/v1/jobs → 202 Accepted (asinkron; klien polling status)
-//   - GET  /api/v1/jobs/{id}/results/{file} → stream langsung dari storage
-//   - Semua error menggunakan amplop JSON yang konsisten: {"error": "..."}
-//   - /healthz untuk monitoring dan load balancer
-//
-// Routing menggunakan net/http built-in Go 1.22+ yang mendukung
-// pola "METHOD /path/{wildcard}" tanpa library eksternal.
+// Package api mengimplementasikan RESTful API gateway pada master node.
 package api
 
 import (
@@ -25,8 +15,7 @@ import (
 	"distapi/internal/storage"
 )
 
-// Handler menggabungkan semua endpoint REST dan dependensinya.
-// Dependensi diinjeksi via konstruktor, bukan global variable.
+// Handler mengelola routing dan dispatch request HTTP.
 type Handler struct {
 	sched     *scheduler.Scheduler
 	reg       *registry.Registry
@@ -37,7 +26,7 @@ type Handler struct {
 	mux       *http.ServeMux
 }
 
-// New membuat Handler dan mendaftarkan semua route.
+// New membuat instance Handler dengan seluruh route yang terdaftar.
 func New(
 	sched *scheduler.Scheduler,
 	reg *registry.Registry,
@@ -62,28 +51,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
-// daftarkanRoute mendaftarkan semua endpoint ke ServeMux bawaan Go 1.22+.
-// Pola "METHOD /path/{param}" otomatis dimatching dan param diambil via r.PathValue.
 func (h *Handler) daftarkanRoute() {
 	h.mux.HandleFunc("GET /healthz", h.handleHealth)
-
 	h.mux.HandleFunc("POST /api/v1/jobs", h.handleBuatJob)
 	h.mux.HandleFunc("GET /api/v1/jobs", h.handleListJob)
 	h.mux.HandleFunc("GET /api/v1/jobs/{id}", h.handleGetJob)
 	h.mux.HandleFunc("DELETE /api/v1/jobs/{id}", h.handleHapusJob)
-
 	h.mux.HandleFunc("GET /api/v1/jobs/{id}/results/{file}", h.handleUnduhHasil)
-
 	h.mux.HandleFunc("GET /api/v1/nodes", h.handleListNode)
 }
 
-// handleHealth mengembalikan 200 OK selalu; dipakai oleh health check dan monitoring.
 func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	tulisJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleBuatJob menerima upload gambar multipart, memvalidasi, dan membuat job baru.
-// Menggunakan 202 Accepted karena pemrosesan berjalan asinkron di background goroutine.
 func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 	batasByte := int64(h.maxImgMB) * int64(h.maxImages) * 1024 * 1024
 	if err := r.ParseMultipartForm(batasByte); err != nil {
@@ -91,7 +72,6 @@ func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Baca opsi pemrosesan dari field "options" (JSON opsional).
 	opts := scheduler.ProcessOptions{Grayscale: true, ResizeWidth: 800, ResizeHeight: 800}
 	if optsStr := r.FormValue("options"); optsStr != "" {
 		var req struct {
@@ -108,12 +88,12 @@ func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 
 	fileHeaders := r.MultipartForm.File["images"]
 	if len(fileHeaders) == 0 {
-		tulisError(w, http.StatusBadRequest, "tidak ada gambar (gunakan field name: images)")
+		tulisError(w, http.StatusBadRequest, "field 'images' wajib diisi")
 		return
 	}
 	if len(fileHeaders) > h.maxImages {
 		tulisError(w, http.StatusBadRequest,
-			fmt.Sprintf("terlalu banyak gambar (maksimum %d)", h.maxImages))
+			fmt.Sprintf("jumlah berkas melebihi batas maksimum (%d)", h.maxImages))
 		return
 	}
 
@@ -122,35 +102,33 @@ func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 	var dataGambar [][]byte
 
 	for _, fh := range fileHeaders {
-		// Validasi format berdasarkan ekstensi (DESIGN.md §4: hanya JPEG dan PNG).
 		ekst := strings.ToLower(fh.Filename)
 		if !strings.HasSuffix(ekst, ".jpg") && !strings.HasSuffix(ekst, ".jpeg") &&
 			!strings.HasSuffix(ekst, ".png") {
 			tulisError(w, http.StatusUnsupportedMediaType,
-				fmt.Sprintf("format tidak didukung: %s (hanya JPEG dan PNG)", fh.Filename))
+				fmt.Sprintf("format berkas tidak didukung: %s", fh.Filename))
 			return
 		}
 		if fh.Size > batasSatuFile {
 			tulisError(w, http.StatusRequestEntityTooLarge,
-				fmt.Sprintf("%s melebihi batas %d MB", fh.Filename, h.maxImgMB))
+				fmt.Sprintf("%s melebihi batas ukuran %d MB", fh.Filename, h.maxImgMB))
 			return
 		}
 
 		f, err := fh.Open()
 		if err != nil {
-			tulisError(w, http.StatusInternalServerError, "gagal membuka file: "+err.Error())
+			tulisError(w, http.StatusInternalServerError, "gagal membuka berkas: "+err.Error())
 			return
 		}
-		// Batasi pembacaan tepat 1 byte di atas limit untuk mendeteksi file yang terlalu besar.
 		data, err := io.ReadAll(io.LimitReader(f, batasSatuFile+1))
 		f.Close()
 		if err != nil {
-			tulisError(w, http.StatusInternalServerError, "gagal membaca file: "+err.Error())
+			tulisError(w, http.StatusInternalServerError, "gagal membaca berkas: "+err.Error())
 			return
 		}
 		if int64(len(data)) > batasSatuFile {
 			tulisError(w, http.StatusRequestEntityTooLarge,
-				fmt.Sprintf("%s melebihi batas %d MB", fh.Filename, h.maxImgMB))
+				fmt.Sprintf("%s melebihi batas ukuran %d MB", fh.Filename, h.maxImgMB))
 			return
 		}
 
@@ -165,9 +143,9 @@ func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.log.Info("job diterima via REST",
+	h.log.Info("job diterima",
 		slog.String("job_id", job.ID),
-		slog.Int("file", len(namaFile)))
+		slog.Int("berkas", len(namaFile)))
 
 	tulisJSON(w, http.StatusAccepted, map[string]any{
 		"job_id": job.ID,
@@ -176,7 +154,6 @@ func (h *Handler) handleBuatJob(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleListJob mengembalikan ringkasan semua job.
 func (h *Handler) handleListJob(w http.ResponseWriter, _ *http.Request) {
 	jobs := h.sched.ListJobs()
 	resp := make([]ringkasanJob, len(jobs))
@@ -186,7 +163,6 @@ func (h *Handler) handleListJob(w http.ResponseWriter, _ *http.Request) {
 	tulisJSON(w, http.StatusOK, resp)
 }
 
-// handleGetJob mengembalikan detail job termasuk status setiap task.
 func (h *Handler) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	job := h.sched.GetJob(id)
@@ -197,7 +173,6 @@ func (h *Handler) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	tulisJSON(w, http.StatusOK, keDetailJob(job))
 }
 
-// handleHapusJob membatalkan job dan menghapus semua filenya.
 func (h *Handler) handleHapusJob(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.sched.CancelJob(id); err != nil {
@@ -207,15 +182,13 @@ func (h *Handler) handleHapusJob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleUnduhHasil meng-stream file hasil pemrosesan langsung ke klien.
-// Menggunakan io.Copy untuk efisiensi memori — tidak muat semua ke RAM dulu.
 func (h *Handler) handleUnduhHasil(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
 	namaFile := r.PathValue("file")
 
 	rc, ukuran, err := h.store.OpenResult(jobID, namaFile)
 	if err != nil {
-		tulisError(w, http.StatusNotFound, "hasil tidak ditemukan")
+		tulisError(w, http.StatusNotFound, "hasil olahan tidak ditemukan")
 		return
 	}
 	defer rc.Close()
@@ -227,10 +200,9 @@ func (h *Handler) handleUnduhHasil(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", tipeKonten)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", ukuran))
 	w.Header().Set("Content-Disposition", `attachment; filename="`+namaFile+`"`)
-	io.Copy(w, rc) //nolint:errcheck // klien mungkin putus koneksi, itu wajar
+	io.Copy(w, rc)
 }
 
-// handleListNode mengembalikan status semua node (hidup maupun mati).
 func (h *Handler) handleListNode(w http.ResponseWriter, _ *http.Request) {
 	nodes := h.reg.AllNodes()
 	resp := make([]responNode, len(nodes))
@@ -247,7 +219,6 @@ func (h *Handler) handleListNode(w http.ResponseWriter, _ *http.Request) {
 	tulisJSON(w, http.StatusOK, resp)
 }
 
-// ringkasanTask adalah bentuk ringkas task untuk response API.
 type ringkasanTask struct {
 	ID         string    `json:"id"`
 	Filename   string    `json:"filename"`
@@ -259,7 +230,6 @@ type ringkasanTask struct {
 	DoneAt     time.Time `json:"done_at,omitempty"`
 }
 
-// ringkasanJob adalah tampilan ringkas job untuk daftar.
 type ringkasanJob struct {
 	ID        string    `json:"id"`
 	Status    string    `json:"status"`
@@ -269,13 +239,11 @@ type ringkasanJob struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// detailJob adalah tampilan lengkap job dengan semua task.
 type detailJob struct {
 	ringkasanJob
 	Tasks []ringkasanTask `json:"tasks"`
 }
 
-// responNode mewakili satu node dalam response API.
 type responNode struct {
 	NodeID        string    `json:"node_id"`
 	Status        string    `json:"status"`
@@ -325,17 +293,12 @@ func keDetailJob(j *scheduler.Job) detailJob {
 	}
 }
 
-// tulisJSON menyetel Content-Type dan mengodekan v sebagai JSON ke w.
 func tulisJSON(w http.ResponseWriter, kode int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(kode)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		// Header sudah terkirim; tidak bisa berbuat banyak selain log.
-		_ = err
-	}
+	_ = json.NewEncoder(w).Encode(v)
 }
 
-// tulisError mengirimkan respons error dengan amplop JSON yang konsisten.
 func tulisError(w http.ResponseWriter, kode int, pesan string) {
 	tulisJSON(w, kode, map[string]string{"error": pesan})
 }

@@ -1,4 +1,3 @@
-// Package config — tes unit untuk parsing dan validasi konfigurasi.
 package config
 
 import (
