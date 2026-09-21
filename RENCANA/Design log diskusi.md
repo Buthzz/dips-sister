@@ -548,12 +548,12 @@ distapi/
 
 **Pembagian kerja (minim konflik merge):**
 
-| Anggota | Tanggung jawab | Folder utama |
-|---|---|---|
-| A | Master core: scheduler, registry, fault tolerance | `scheduler/`, `registry/` |
-| B | gRPC: proto, server node, client master, heartbeat | `proto/`, `rpc/`, `gen/` |
-| C | REST API, storage, config, main | `api/`, `storage/`, `config/`, `cmd/` |
-| D | Frontend Vue + worker (resize/grayscale) | `web/`, `worker/` |
+| Anggota | Nama & NIM | Tanggung jawab | Folder utama |
+|---|---|---|---|
+| **A** | **Rafli Khiyanuran Bazhari** (240411100001) | Master core: scheduler, registry, fault tolerance | `scheduler/`, `registry/` |
+| **B** | **Irma Annisatul Jannah** (240411100014) | gRPC: proto, server node, client master, heartbeat | `proto/`, `rpc/`, `gen/` |
+| **C** | **Muhammad Fajar Nugroho** (240411100103) | REST API, storage, config, main | `api/`, `storage/`, `config/`, `cmd/` |
+| **D** | **Zakaria Mujur Prasetyo** (240411100144) | Frontend Vue + worker (resize/grayscale) | `web/`, `worker/` |
 
 Kontrak (`.proto` dan struct REST) disepakati **lebih dulu** agar keempatnya
 bekerja paralel.

@@ -67,7 +67,7 @@ Pastikan seluruh *quality gate* berikut berstatus hijau sebelum melakukan demons
 ```powershell
 go build ./...       # Verifikasi kompilasi seluruh package
 go vet ./...         # Analisis statik bawaan Go (Wajib 0 warning)
-go test ./...        # Eksekusi seluruh rangkaian unit test (6 package PASS)
+go test ./...        # Eksekusi seluruh rangkaian unit test (7 package PASS)
 ```
 
 ## Indeks Dokumentasi Mendalam (`docs/`)
@@ -83,5 +83,6 @@ Seluruh rincian arsitektural, teori komputasi terdistribusi, dan panduan teknis 
 | [`docs/amdahl.md`](docs/amdahl.md) | Analisis teoretis percepatan komputasi paralel Hukum Amdahl & Hukum Gustafson |
 | [`docs/rest-api.md`](docs/rest-api.md) | Spesifikasi formal 7 endpoint REST API, schema payload, kode status, dan contoh PowerShell |
 | [`docs/struktur-project.md`](docs/struktur-project.md) | Pembedahan modularitas kode sumber, batasan arsitektur, dan hierarki direktori |
+| [`docs/setup-windows.md`](docs/setup-windows.md) | Panduan instalasi Go, clone repositori, konfigurasi Windows Firewall, dan kompilasi |
 | [`docs/cara-penggunaan.md`](docs/cara-penggunaan.md) | Manual operasional Windows PowerShell, tahapan startup kluster, dan skenario uji demo |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Matriks mitigasi kegagalan Windows (Firewall, socket in-use, Wi-Fi isolation, NTFS lock) |

@@ -652,12 +652,12 @@ distapi/
 
 ### 10.1 Pembagian kerja (minim konflik merge) 🟡
 
-| Anggota | Tanggung jawab | Folder utama |
-|---|---|---|
-| **A** | Scheduler, registry, fault tolerance | `scheduler/`, `registry/` |
-| **B** | gRPC: proto, server, client, heartbeat | `proto/`, `rpc/`, `gen/` |
-| **C** | REST API, storage, config, main, **integrator** | `api/`, `storage/`, `config/`, `cmd/` |
-| **D** | Frontend Vue + worker resize/grayscale | `web/`, `worker/` |
+| Anggota | Nama & NIM | Tanggung jawab | Folder utama |
+|---|---|---|---|
+| **A** | **Rafli Khiyanuran Bazhari** (240411100001) | Scheduler, registry, fault tolerance | `scheduler/`, `registry/` |
+| **B** | **Irma Annisatul Jannah** (240411100014) | gRPC: proto, server, client, heartbeat | `proto/`, `rpc/`, `gen/` |
+| **C** | **Muhammad Fajar Nugroho** (240411100103) | REST API, storage, config, main, **integrator** | `api/`, `storage/`, `config/`, `cmd/` |
+| **D** | **Zakaria Mujur Prasetyo** (240411100144) | Frontend Vue + worker resize/grayscale | `web/`, `worker/` |
 
 Pembagian di atas hanya usulan struktur; **tukar peran sesuai kemampuan
 masing-masing** (tidak ada asumsi tentang siapa yang mahir apa). Yang tetap:
