@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -193,5 +195,58 @@ func TestResizeSingleDimension(t *testing.T) {
 	img, _, _ := image.Decode(bytes.NewReader(out))
 	if img.Bounds().Dx() > 100 {
 		t.Errorf("lebar melebihi batas: %d", img.Bounds().Dx())
+	}
+}
+
+// TestProcessGeneratedTestdata menguji pemrosesan seluruh berkas citra asli di folder testdata.
+func TestProcessGeneratedTestdata(t *testing.T) {
+	berkasUji := []string{
+		"sample_1080p.jpg",
+		"sample_square.jpg",
+		"sample_landscape.jpg",
+		"sample_portrait.png",
+		"sample_small.png",
+		"sample_large_2k.jpg",
+	}
+
+	for _, nama := range berkasUji {
+		t.Run(nama, func(t *testing.T) {
+			path := filepath.Join("..", "..", "testdata", nama)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("berkas %s belum ada di testdata, lewati pengujian lokal", path)
+				return
+			}
+
+			// Uji transformasi kombinasi: resize ke 400x400 + grayscale
+			hasil, err := Process(data, nama, Options{
+				ResizeWidth:  400,
+				ResizeHeight: 400,
+				Grayscale:    true,
+			})
+			if err != nil {
+				t.Fatalf("gagal memproses %s: %v", nama, err)
+			}
+			if len(hasil) == 0 {
+				t.Fatalf("hasil pemrosesan %s kosong", nama)
+			}
+
+			// Validasi hasil dapat di-decode kembali dan dimensinya tereduksi
+			outImg, format, err := image.Decode(bytes.NewReader(hasil))
+			if err != nil {
+				t.Fatalf("gagal men-decode hasil %s: %v", nama, err)
+			}
+
+			b := outImg.Bounds()
+			if b.Dx() > 400 || b.Dy() > 400 {
+				t.Errorf("dimensi %s melebihi batas: %dx%d", nama, b.Dx(), b.Dy())
+			}
+
+			// Format keluaran harus identik dengan masukan
+			expectedFormat := DetectFormat(nama)
+			if format != expectedFormat {
+				t.Errorf("format keluaran %s tidak cocok: mau %s, dapat %s", nama, expectedFormat, format)
+			}
+		})
 	}
 }
