@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -61,7 +62,9 @@ func (h *Handler) daftarkanRoute() {
 	h.mux.HandleFunc("DELETE /api/v1/jobs/{id}", h.handleHapusJob)
 	h.mux.HandleFunc("GET /api/v1/jobs/{id}/results/{file}", h.handleUnduhHasil)
 	h.mux.HandleFunc("GET /api/v1/nodes", h.handleListNode)
+	h.mux.HandleFunc("GET /api/v1/nodes/{id}/probe", h.handleProbeNode)
 	h.daftarkanFrontend()
+
 }
 
 // daftarkanFrontend menyajikan aset statis Vue yang di-embed ke binary.
@@ -246,6 +249,49 @@ func (h *Handler) handleListNode(w http.ResponseWriter, _ *http.Request) {
 	}
 	tulisJSON(w, http.StatusOK, resp)
 }
+
+// handleProbeNode melakukan uji koneksi TCP ke node dan mengembalikan latensi.
+// GET /api/v1/nodes/{id}/probe
+func (h *Handler) handleProbeNode(w http.ResponseWriter, r *http.Request) {
+	nodeID := r.PathValue("id")
+	node := h.reg.GetNode(nodeID)
+	if node == nil {
+		tulisError(w, http.StatusNotFound, "node tidak ditemukan: "+nodeID)
+		return
+	}
+
+	mulai := time.Now()
+	conn, err := net.DialTimeout("tcp", node.AdvertiseAddr, 2*time.Second)
+	latency := time.Since(mulai).Milliseconds()
+
+	if err != nil {
+		h.log.Info("probe node gagal",
+			slog.String("node_id", nodeID),
+			slog.String("addr", node.AdvertiseAddr),
+			slog.String("error", err.Error()))
+		tulisJSON(w, http.StatusOK, map[string]any{
+			"node_id":    nodeID,
+			"addr":       node.AdvertiseAddr,
+			"reachable":  false,
+			"latency_ms": latency,
+			"error":      err.Error(),
+		})
+		return
+	}
+	conn.Close()
+
+	h.log.Info("probe node berhasil",
+		slog.String("node_id", nodeID),
+		slog.String("addr", node.AdvertiseAddr),
+		slog.Int64("latency_ms", latency))
+	tulisJSON(w, http.StatusOK, map[string]any{
+		"node_id":    nodeID,
+		"addr":       node.AdvertiseAddr,
+		"reachable":  true,
+		"latency_ms": latency,
+	})
+}
+
 
 type ringkasanTask struct {
 	ID         string    `json:"id"`

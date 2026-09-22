@@ -6,6 +6,9 @@ dist/
 # Data directory (temporary job files)
 data/
 
+# Materi lokal — tidak dipush ke remote
+tmp/
+
 # Go build cache
 *.test
 

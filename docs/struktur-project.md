@@ -23,6 +23,7 @@ distapi/
     scheduler/              # Algoritma orkestrasi Scatter-Gather & penjadwalan ulang
     rpc/                    # Server & Client gRPC, Interceptor Autentikasi Token
     api/                    # RESTful API Gateway (Go 1.22+ Standard Mux)
+    tui/                    # Antarmuka visual Terminal UI (Bubble Tea & Lip Gloss)
   web/                      # Frontend Vue 3 + Vite
     embed.go                # //go:embed semua aset web/dist ke biner (single binary)
     src/                    # Kode sumber Vue (main.js, App.vue, components/, api.js)
@@ -134,3 +135,11 @@ flowchart TD
   - Mengembalikan status `202 Accepted` untuk pemrosesan asinkron (klien melakukan *polling*).
   - Streaming berkas hasil langsung dari disk ke response writer HTTP dengan konsumsi memori konstan ($O(1)$ memory streaming).
   - Menyajikan antarmuka web Vue (hasil build `web/dist` yang di-embed via package `distapi/web`) pada akar path `/`, sehingga satu biner berisi API dan UI.
+
+### `internal/tui`
+* **Peran:** Antarmuka visual terminal interaktif (*Terminal User Interface*).
+* **Fungsi Kunci:**
+  - Mengimplementasikan arsitektur *The Elm Architecture* (`tea.Model`, `Init`, `Update`, `View`) berbasis pustaka Bubble Tea dan pewarnaan Lip Gloss.
+  - Menyediakan tampilan *dashboard* dual-tab pada Master: Tab 1 untuk ringkasan tabel status Node & Job aktif, Tab 2 untuk Event Log kluster realtime.
+  - Menyediakan ring buffer thread-safe (`EventLog`) dan snapshot status node (`NodeState`) untuk menghindari *data race* saat diakses bersamaan oleh goroutine RPC/heartbeat dan goroutine perender TUI.
+

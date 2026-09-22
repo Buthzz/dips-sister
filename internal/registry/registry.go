@@ -2,7 +2,9 @@
 package registry
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,7 +29,7 @@ type NodeInfo struct {
 	RegisteredAt  time.Time
 }
 
-// Registry menyimpan dan memetakan identitas node ke alamat jaringan.
+// Registry menyimpan informasi semua node dalam cluster secara thread-safe.
 type Registry struct {
 	mu      sync.RWMutex
 	nodes   map[string]*NodeInfo
@@ -35,7 +37,7 @@ type Registry struct {
 	log     *slog.Logger
 }
 
-// New membuat instance Registry dengan batas timeout heartbeat tertentu.
+// New membuat Registry baru dengan batas waktu deteksi node mati.
 func New(timeout time.Duration, log *slog.Logger) *Registry {
 	return &Registry{
 		nodes:   make(map[string]*NodeInfo),
@@ -44,26 +46,82 @@ func New(timeout time.Duration, log *slog.Logger) *Registry {
 	}
 }
 
-// Register mendaftarkan node baru atau memperbarui entri node yang sudah ada.
+// Register mendaftarkan node baru. Mengembalikan true jika registrasi berhasil diterima.
 func (r *Registry) Register(nodeID, sessionID, advertiseAddr string, capacity int) bool {
+	ok, _, _ := r.RegisterNode(nodeID, sessionID, advertiseAddr, capacity)
+	return ok
+}
+
+// RegisterNode mendaftarkan node baru dan mengembalikan status, ID yang dialokasikan, dan pesan alasan.
+// Jika nodeID bernilai kosong atau "auto", master secara otomatis mengalokasikan ID (node-1, node-2, dst).
+func (r *Registry) RegisterNode(nodeID, sessionID, advertiseAddr string, capacity int) (bool, string, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	now := time.Now()
+	cleanID := strings.TrimSpace(nodeID)
 
-	if existing, ok := r.nodes[nodeID]; ok && existing.SessionID == sessionID {
-		existing.AdvertiseAddr = advertiseAddr
-		existing.Capacity = capacity
-		existing.Status = StatusAlive
-		existing.LastHeartbeat = now
-		r.log.Info("node refresh registrasi",
-			slog.String("node_id", nodeID),
-			slog.String("addr", advertiseAddr))
-		return true
+	// Alokasi otomatis jika ID tidak ditentukan atau "auto"
+	if cleanID == "" || strings.EqualFold(cleanID, "auto") {
+		// Cek apakah alamat host ini sudah pernah terdaftar sebelumnya (sticky assignment saat restart)
+		assigned := ""
+		for id, node := range r.nodes {
+			if node.AdvertiseAddr == advertiseAddr {
+				assigned = id
+				break
+			}
+		}
+
+		// Jika belum pernah terdaftar atau alamatnya baru, cari nomor node-1, node-2, dst yang tersedia
+		if assigned == "" {
+			for i := 1; ; i++ {
+				candidate := fmt.Sprintf("node-%d", i)
+				existing, exists := r.nodes[candidate]
+				if !exists {
+					assigned = candidate
+					break
+				}
+				// Jika kandidat sudah berstatus dead dan melebihi batas timeout, dapat dialokasikan ulang
+				if existing.Status == StatusDead && now.Sub(existing.LastHeartbeat) >= r.timeout {
+					assigned = candidate
+					break
+				}
+			}
+		}
+		cleanID = assigned
 	}
 
-	r.nodes[nodeID] = &NodeInfo{
-		NodeID:        nodeID,
+	if existing, ok := r.nodes[cleanID]; ok {
+		// Sesi sama: refresh heartbeat & kapasitas biasa
+		if existing.SessionID == sessionID {
+			existing.AdvertiseAddr = advertiseAddr
+			existing.Capacity = capacity
+			existing.Status = StatusAlive
+			existing.LastHeartbeat = now
+			r.log.Info("node refresh registrasi",
+				slog.String("node_id", cleanID),
+				slog.String("addr", advertiseAddr))
+			return true, cleanID, "ok"
+		}
+
+		// Sesi beda dari alamat berbeda: tolak jika node lama masih berstatus alive
+		if existing.AdvertiseAddr != advertiseAddr &&
+			existing.Status == StatusAlive &&
+			now.Sub(existing.LastHeartbeat) < r.timeout {
+			errMsg := fmt.Sprintf("node ID '%s' sedang aktif digunakan oleh worker di %s (gunakan flag --node-id berbeda)", cleanID, existing.AdvertiseAddr)
+			r.log.Warn("registrasi ditolak: konflik identitas node",
+				slog.String("node_id", cleanID),
+				slog.String("alamat_aktif", existing.AdvertiseAddr),
+				slog.String("alamat_baru", advertiseAddr))
+			return false, cleanID, errMsg
+		}
+
+		// Sesi beda dari alamat yang sama (restart node di laptop sama),
+		// atau node lama sudah mati (> timeout): sesi baru diterima dan menimpa yang lama
+	}
+
+	r.nodes[cleanID] = &NodeInfo{
+		NodeID:        cleanID,
 		SessionID:     sessionID,
 		AdvertiseAddr: advertiseAddr,
 		Capacity:      capacity,
@@ -72,10 +130,10 @@ func (r *Registry) Register(nodeID, sessionID, advertiseAddr string, capacity in
 		RegisteredAt:  now,
 	}
 	r.log.Info("node terdaftar",
-		slog.String("node_id", nodeID),
+		slog.String("node_id", cleanID),
 		slog.String("addr", advertiseAddr),
 		slog.Int("capacity", capacity))
-	return true
+	return true, cleanID, "ok"
 }
 
 // Heartbeat memperbarui timestamp aktif terakhir dari node.
@@ -132,6 +190,20 @@ func (r *Registry) AllNodes() []NodeInfo {
 	}
 	return out
 }
+
+// GetNode mengembalikan salinan NodeInfo berdasarkan node ID.
+// Mengembalikan nil jika node tidak ditemukan.
+func (r *Registry) GetNode(nodeID string) *NodeInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	n, ok := r.nodes[nodeID]
+	if !ok {
+		return nil
+	}
+	cp := *n
+	return &cp
+}
+
 
 // TickDeadCheck memindai node dan menandai yang melewati batas timeout sebagai dead.
 func (r *Registry) TickDeadCheck() []string {

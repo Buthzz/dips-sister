@@ -69,19 +69,54 @@ func NewCoordinatorServer(reg *registry.Registry, log *slog.Logger) *Coordinator
 
 // Register menerima permintaan pendaftaran dari worker node.
 func (s *CoordinatorServer) Register(_ context.Context, req *cluster.RegisterRequest) (*cluster.RegisterResponse, error) {
+	addr := req.GetAdvertiseAddr()
+
 	s.log.Info("RPC Register diterima",
 		slog.String("node_id", req.GetNodeId()),
 		slog.String("session", req.GetSessionId()),
-		slog.String("addr", req.GetAdvertiseAddr()))
+		slog.String("addr", addr))
 
-	ok := s.reg.Register(
+	// B1: validasi format alamat di sisi server — tolak jika tidak host:port
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		s.log.Warn("register ditolak: format advertise tidak valid",
+			slog.String("addr", addr),
+			slog.String("node_id", req.GetNodeId()))
+		return &cluster.RegisterResponse{
+			Accepted: false,
+			Message:  fmt.Sprintf("format alamat tidak valid (harus host:port): %v", err),
+		}, nil
+	}
+
+	ok, assignedID, regMsg := s.reg.RegisterNode(
 		req.GetNodeId(),
 		req.GetSessionId(),
-		req.GetAdvertiseAddr(),
+		addr,
 		int(req.GetCapacity()),
 	)
-	return &cluster.RegisterResponse{Accepted: ok, Message: "ok"}, nil
+	if !ok {
+		return &cluster.RegisterResponse{Accepted: false, Message: regMsg}, nil
+	}
+
+	// B2: probe balik TCP 1 detik — registrasi tetap diterima, hanya beri peringatan
+	msg := "ok"
+	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	if err != nil {
+		s.log.Warn("probe balik ke node gagal — kemungkinan terhalang firewall",
+			slog.String("node_id", assignedID),
+			slog.String("addr", addr),
+			slog.String("error", err.Error()))
+		msg = "PERINGATAN: node terdaftar, tapi master tidak bisa menjangkau " + addr +
+			" — periksa Windows Firewall di laptop node (izinkan port " + portOf(addr) + " TCP masuk)"
+	} else {
+		conn.Close()
+	}
+
+	return &cluster.RegisterResponse{
+		Accepted: true,
+		Message:  fmt.Sprintf("ASSIGNED:%s|%s", assignedID, msg),
+	}, nil
 }
+
 
 // Heartbeat menerima sinyal detak jantung dari worker node.
 func (s *CoordinatorServer) Heartbeat(_ context.Context, req *cluster.HeartbeatRequest) (*cluster.HeartbeatResponse, error) {
@@ -94,10 +129,17 @@ func (s *CoordinatorServer) Heartbeat(_ context.Context, req *cluster.HeartbeatR
 	return &cluster.HeartbeatResponse{Ok: ok}, nil
 }
 
+// TaskObserver menerima notifikasi event pemrosesan task pada worker.
+type TaskObserver interface {
+	OnTaskStart(taskID, filename string)
+	OnTaskComplete(taskID, filename string, success bool, durationMs int64)
+}
+
 // WorkerServer mengimplementasikan gRPC service Worker pada node.
 type WorkerServer struct {
 	cluster.UnimplementedWorkerServer
-	log *slog.Logger
+	log      *slog.Logger
+	observer TaskObserver
 }
 
 // NewWorkerServer membuat instance WorkerServer baru.
@@ -108,12 +150,21 @@ func NewWorkerServer(log *slog.Logger) *WorkerServer {
 	return &WorkerServer{log: log}
 }
 
+// SetObserver mendaftarkan observer untuk memantau siklus hidup task.
+func (s *WorkerServer) SetObserver(obs TaskObserver) {
+	s.observer = obs
+}
+
 // ProcessImage mengeksekusi transformasi citra yang ditugaskan oleh master.
 func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessRequest) (*cluster.ProcessResponse, error) {
 	mulai := time.Now()
 	s.log.Info("mulai ProcessImage",
 		slog.String("task_id", req.GetTaskId()),
 		slog.String("filename", req.GetFilename()))
+
+	if s.observer != nil {
+		s.observer.OnTaskStart(req.GetTaskId(), req.GetFilename())
+	}
 
 	opts := worker.Options{
 		ResizeWidth:  int(req.GetResizeWidth()),
@@ -128,6 +179,9 @@ func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessReque
 		s.log.Error("ProcessImage gagal",
 			slog.String("task_id", req.GetTaskId()),
 			slog.String("error", err.Error()))
+		if s.observer != nil {
+			s.observer.OnTaskComplete(req.GetTaskId(), req.GetFilename(), false, durasi)
+		}
 		return &cluster.ProcessResponse{
 			TaskId:     req.GetTaskId(),
 			Success:    false,
@@ -139,6 +193,10 @@ func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessReque
 	s.log.Info("ProcessImage selesai",
 		slog.String("task_id", req.GetTaskId()),
 		slog.Int64("duration_ms", durasi))
+
+	if s.observer != nil {
+		s.observer.OnTaskComplete(req.GetTaskId(), req.GetFilename(), true, durasi)
+	}
 
 	return &cluster.ProcessResponse{
 		TaskId:     req.GetTaskId(),
@@ -199,4 +257,13 @@ func DialNode(addr, token string) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("rpc: dial %s gagal: %w", addr, err)
 	}
 	return conn, nil
+}
+
+// portOf mengekstrak bagian port dari alamat host:port.
+// Jika gagal, mengembalikan addr apa adanya.
+func portOf(addr string) string {
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		return port
+	}
+	return addr
 }

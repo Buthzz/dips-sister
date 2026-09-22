@@ -20,77 +20,70 @@ go build -o dist\distapi.exe .\cmd\distapi
 
 File `dist\distapi.exe` yang dihasilkan bersifat *stand-alone* (tidak memerlukan runtime Go di laptop node). Cukup salin berkas `distapi.exe` ini via USB Flashdisk atau share folder lokal ke Laptop 2, 3, dan 4.
 
-## 2. Peta Alokasi Host & IP Jaringan
+## 2. Peta Alokasi Host & IP Jaringan (Auto-Detect)
 
 Contoh skenario topologi 4 laptop pada subnet `192.168.1.0/24`:
 
 ```mermaid
 flowchart LR
-    L1["Laptop 1 (Master)\nIP: 192.168.1.10\nHTTP :8080 | gRPC :9000"]
-    L2["Laptop 2 (Node-1)\nIP: 192.168.1.11\ngRPC :9000"]
-    L3["Laptop 3 (Node-2)\nIP: 192.168.1.12\ngRPC :9000"]
-    L4["Laptop 4 (Node-3)\nIP: 192.168.1.13\ngRPC :9000"]
+    L1["Laptop 1 (Master)\nIP: 192.168.1.10 (Auto-Detected)\nHTTP :8080 | gRPC :9000"]
+    L2["Laptop 2 (Node-1)\nIP: 192.168.1.11 (Auto-Detected)\ngRPC :9000"]
+    L3["Laptop 3 (Node-2)\nIP: 192.168.1.12 (Auto-Detected)\ngRPC :9000"]
+    L4["Laptop 4 (Node-3)\nIP: 192.168.1.13 (Auto-Detected)\ngRPC :9000"]
 
     L2 -->|"Register & Heartbeat"| L1
     L3 -->|"Register & Heartbeat"| L1
     L4 -->|"Register & Heartbeat"| L1
 ```
 
-> **Identifikasi IP:** Jalankan perintah `ipconfig` pada setiap laptop dan catat nilai `IPv4 Address` adapter Wi-Fi/Ethernet aktif.
+> **Deteksi IP Otomatis:** Sistem secara otomatis mendeteksi IP fisik Wi-Fi / LAN yang aktif pada tiap laptop (mengabaikan interface loopback dan adapter virtual seperti VMware/WSL/VirtualBox). Pengguna **tidak perlu menjalankan `ipconfig`** secara manual. Master akan langsung menampilkan IP dan perintah worker yang siap disalin ke laptop lain.
 
-## 3. Urutan Eksekusi Kluster (Execution Sequence)
+## 3. Tingkatan Bantuan & Perintah CLI
+
+Sistem menyediakan 3 tingkatan bantuan untuk kenyamanan operator:
+
+| Perintah | Tingkat Detail | Konten yang Ditampilkan |
+|---|---|---|
+| `.\distapi.exe` | **Default (Ringkas)** | Hanya menampilkan contoh cepat eksekusi Master dan Worker. |
+| `.\distapi.exe -h` | **Inti (Menengah)** | Menampilkan parameter inti (`--mode`, `--token`, `--master`, `--node-id`, `--tui`, `--workers`, ports). |
+| `.\distapi.exe --help` | **Lengkap** | Menampilkan seluruh deskripsi arsitektur, parameter failure detector, panduan curl, dan troubleshooting firewall. |
+
+## 4. Urutan Eksekusi Kluster (Execution Sequence)
 
 ### Langkah 1: Jalankan Master (Laptop 1)
-Buka PowerShell pada Laptop 1 dan jalankan:
+Buka PowerShell pada Laptop 1 dan jalankan (disarankan menggunakan mode visual TUI):
 
 ```powershell
-.\dist\distapi.exe `
-  --mode=master `
-  --http-port=8080 `
-  --grpc-port=9000 `
-  --token=demo123 `
-  --log-level=info
+.\dist\distapi.exe --mode=master --token=demo123 --tui
 ```
-*Tunggu hingga terminal menampilkan:*
-`level=INFO msg="gRPC server mendengarkan" addr=:9000`
-`level=INFO msg="HTTP server mendengarkan" addr=:8080`
+
+*Terminal Master akan langsung menampilkan antarmuka visual Bubble Tea berisi:*
+- Alamat IP Master yang terdeteksi.
+- URL Web UI (`http://<IP>:8080`).
+- Port gRPC kluster (`:9000`).
+- Perintah PowerShell siap salin untuk Laptop 2, 3, dan 4.
+
+*(Opsional: Jika ingin mode CLI teks standar tanpa TUI, cukup hilangkan flag `--tui`)*.
 
 ### Langkah 2: Jalankan Node Worker (Laptop 2, 3, 4)
 
-**Pada Laptop 2 (Node 1):**
+Seluruh laptop worker dapat menjalankan **perintah yang sama persis** tanpa perlu menentukan `--node-id` secara manual. Master akan mengalokasikan nomor node (`node-1`, `node-2`, `node-3`) secara otomatis berdasarkan urutan kedatangan:
+
 ```powershell
-.\distapi.exe `
-  --mode=node `
-  --node-id=node-1 `
-  --master=192.168.1.10:9000 `
-  --advertise=192.168.1.11:9000 `
-  --token=demo123 `
-  --log-level=info
+.\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123 --tui
 ```
 
-**Pada Laptop 3 (Node 2):**
-```powershell
-.\distapi.exe `
-  --mode=node `
-  --node-id=node-2 `
-  --master=192.168.1.10:9000 `
-  --advertise=192.168.1.12:9000 `
-  --token=demo123 `
-  --log-level=info
-```
+*Begitu terhubung ke Master:*
+- **Laptop 2** otomatis dialokasikan sebagai `node-1` (tampil di header TUI & log).
+- **Laptop 3** otomatis dialokasikan sebagai `node-2` (tampil di header TUI & log).
+- **Laptop 4** otomatis dialokasikan sebagai `node-3` (tampil di header TUI & log).
 
-**Pada Laptop 4 (Node 3):**
-```powershell
-.\distapi.exe `
-  --mode=node `
-  --node-id=node-3 `
-  --master=192.168.1.10:9000 `
-  --advertise=192.168.1.13:9000 `
-  --token=demo123 `
-  --log-level=info
-```
+*(Catatan: Operator tetap dapat menentukan ID secara eksplisit jika diinginkan, misal `--node-id=node-khusus`)*.
 
-## 4. Validasi Topologi Kluster
+> **Perlindungan Tabrakan Identitas (Node ID Collision Guard):**
+> Jika ada worker lain memaksa mendaftar manual menggunakan ID yang sedang aktif digunakan laptop lain, Master akan menolak pendaftaran tersebut secara tegas (`Accepted: false`) untuk mencegah *session hijacking* dan *flapping*. Jika sebuah node mengalami restart pada laptop yang sama, Master langsung menerimanya kembali dengan ID yang sama (*sticky assignment*).
+
+## 5. Validasi Topologi Kluster
 
 Setelah seluruh node dijalankan, periksa pendaftaran node dari terminal Laptop 1 atau browser:
 
@@ -107,7 +100,7 @@ Pastikan output menampilkan ketiga node dengan status `"alive"`:
 ]
 ```
 
-## 5. Pengujian Alur Pemrosesan Batch (Workflow Test)
+## 6. Pengujian Alur Pemrosesan Batch (Workflow Test)
 
 ### A. Kirim Batch Gambar (Scatter Phase)
 Jalankan pengiriman batch gambar melalui `curl.exe` bawaan Windows:
@@ -141,7 +134,7 @@ Invoke-WebRequest `
   -OutFile "C:\demo\hasil_img1.jpg"
 ```
 
-## 6. Skenario Uji Ketahanan (Fault Tolerance Demo)
+## 7. Skenario Uji Ketahanan (Fault Tolerance Demo)
 
 Untuk menunjukkan keandalan sistem di depan dosen/penguji:
 

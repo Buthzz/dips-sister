@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,17 +21,32 @@ import (
 	rpcpkg "distapi/internal/rpc"
 	"distapi/internal/scheduler"
 	"distapi/internal/storage"
+	"distapi/internal/tui"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
 	cfg := config.Parse()
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	// Jika TUI aktif, alihkan log ke file agar antarmuka terminal tetap bersih
+	var log *slog.Logger
+	if cfg.TUI {
+		f, err := os.OpenFile("distapi-tui.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err == nil {
+			log = slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: cfg.LogLevel}))
+		} else {
+			log = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+		}
+	} else {
+		log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	}
 	slog.SetDefault(log)
 
 	log.Info("distapi mulai",
 		slog.String("mode", string(cfg.Mode)),
-		slog.String("versi", "0.1.0"))
+		slog.String("versi", "0.1.0"),
+		slog.Bool("tui", cfg.TUI))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -43,7 +59,10 @@ func main() {
 	}
 }
 
-func jalankanMaster(ctx context.Context, cfg config.Config, log *slog.Logger) {
+func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logger) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	store, err := storage.New(cfg.DataDir)
 	if err != nil {
 		log.Error("inisialisasi storage gagal", slog.String("error", err.Error()))
@@ -63,16 +82,20 @@ func jalankanMaster(ctx context.Context, cfg config.Config, log *slog.Logger) {
 	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
 	coordSrv := rpcpkg.NewCoordinatorServer(reg, log)
 
+	// Event log untuk TUI (tetap dibuat agar bisa dipakai meski TUI nonaktif)
+	evLog := tui.NewEventLog(200)
+
 	hook := &hookPendaftaran{
 		CoordinatorServer: coordSrv,
 		nodeClient:        nodeClient,
 		token:             cfg.Token,
 		log:               log,
+		evLog:             evLog,
 	}
 	cluster.RegisterCoordinatorServer(grpcSrv, hook)
 	cluster.RegisterWorkerServer(grpcSrv, rpcpkg.NewWorkerServer(log))
 
-	go monitorNodeMati(ctx, reg, sched, log)
+	go monitorNodeMati(ctx, reg, sched, log, evLog)
 	go pembersihJobTTL(ctx, sched, store, cfg.JobTTL, log)
 
 	go func() {
@@ -94,16 +117,43 @@ func jalankanMaster(ctx context.Context, cfg config.Config, log *slog.Logger) {
 		}
 	}()
 
-	<-ctx.Done()
-	log.Info("master: mulai shutdown...")
+	masterIP := config.DetectLocalIP()
+	evLog.Info(fmt.Sprintf("master aktif di %s:%d (HTTP :%d)", masterIP, cfg.GRPCPort, cfg.HTTPPort))
+	evLog.Info(fmt.Sprintf("perintah worker: .\\dist\\distapi.exe --mode=node --master=%s:%d --token=%s --tui",
+		masterIP, cfg.GRPCPort, cfg.Token))
 
+	if !cfg.TUI {
+		fmt.Printf("\n[distapi Master Aktif]\n"+
+			"  IP Master Terdeteksi : %s\n"+
+			"  Web UI / REST API    : http://%s:%d (atau http://localhost:%d)\n"+
+			"  gRPC Cluster Port    : %s:%d\n\n"+
+			"Perintah yang dapat disalin untuk laptop Node Worker:\n"+
+			"  .\\dist\\distapi.exe --mode=node --master=%s:%d --token=%s --tui\n\n",
+			masterIP, masterIP, cfg.HTTPPort, cfg.HTTPPort, masterIP, cfg.GRPCPort, masterIP, cfg.GRPCPort, cfg.Token)
+	}
+
+	if cfg.TUI {
+		model := tui.NewMasterModel(reg, sched, evLog, masterIP, cfg.HTTPPort, cfg.GRPCPort, cfg.Token)
+		p := tea.NewProgram(model, tea.WithAltScreen())
+		if _, err := p.Run(); err != nil {
+			log.Error("TUI error", slog.String("error", err.Error()))
+		}
+		cancel()
+	} else {
+		<-ctx.Done()
+	}
+
+	log.Info("master: mulai shutdown...")
 	shutCtx, batal := context.WithTimeout(context.Background(), 10*time.Second)
 	defer batal()
 	_ = srvHTTP.Shutdown(shutCtx)
 	log.Info("master: shutdown selesai")
 }
 
-func jalankanNode(ctx context.Context, cfg config.Config, log *slog.Logger) {
+func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	sessionID := buatSessionID()
 	log.Info("node mulai",
 		slog.String("node_id", cfg.NodeID),
@@ -111,8 +161,24 @@ func jalankanNode(ctx context.Context, cfg config.Config, log *slog.Logger) {
 		slog.String("master", cfg.MasterAddr),
 		slog.String("advertise", cfg.AdvertiseAddr))
 
+	nodeIP := config.DetectLocalIP()
+	if !cfg.TUI {
+		fmt.Printf("\n[distapi Node Worker Aktif]\n"+
+			"  Node ID              : %s\n"+
+			"  IP Node Terdeteksi   : %s\n"+
+			"  Advertise ke Master  : %s\n"+
+			"  Master Tujuan        : %s\n\n",
+			cfg.NodeID, nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr)
+	}
+
+	evLog := tui.NewEventLog(100)
+	evLog.Info(fmt.Sprintf("node '%s' aktif di IP %s (advertise: %s)", cfg.NodeID, nodeIP, cfg.AdvertiseAddr))
+	state := tui.NewNodeState(cfg.NodeID, sessionID, cfg.MasterAddr, cfg.AdvertiseAddr)
+
 	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
-	cluster.RegisterWorkerServer(grpcSrv, rpcpkg.NewWorkerServer(log))
+	workerSrv := rpcpkg.NewWorkerServer(log)
+	workerSrv.SetObserver(state)
+	cluster.RegisterWorkerServer(grpcSrv, workerSrv)
 	go func() {
 		if err := rpcpkg.ServeGRPC(ctx, grpcSrv, cfg.GRPCPort, log); err != nil {
 			log.Error("node gRPC error", slog.String("error", err.Error()))
@@ -128,14 +194,37 @@ func jalankanNode(ctx context.Context, cfg config.Config, log *slog.Logger) {
 
 	coordClient := cluster.NewCoordinatorClient(conn)
 
-	if err := registerDenganRetry(ctx, coordClient, cfg, sessionID, log); err != nil {
+	assignedID, err := registerDenganRetry(ctx, coordClient, cfg, sessionID, log)
+	if err != nil {
 		log.Error("registrasi ke master gagal", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	cfg.NodeID = assignedID
+	state.SetNodeID(assignedID)
+	state.RecordHeartbeatSuccess()
+	evLog.Info("terdaftar ke master sebagai " + assignedID)
 
-	go loopHeartbeat(ctx, coordClient, cfg, sessionID, log)
+	if !cfg.TUI {
+		fmt.Printf("[Node Terdaftar ke Master]\n"+
+			"  Identitas Terkonfirmasi : %s\n"+
+			"  Alamat Advertise        : %s\n"+
+			"  Master Hubungan         : %s\n\n",
+			assignedID, cfg.AdvertiseAddr, cfg.MasterAddr)
+	}
 
-	<-ctx.Done()
+	go loopHeartbeat(ctx, coordClient, cfg, sessionID, log, state, evLog)
+
+	if cfg.TUI {
+		model := tui.NewNodeModel(state, evLog)
+		p := tea.NewProgram(model, tea.WithAltScreen())
+		if _, err := p.Run(); err != nil {
+			log.Error("TUI error", slog.String("error", err.Error()))
+		}
+		cancel()
+	} else {
+		<-ctx.Done()
+	}
+
 	log.Info("node: menghentikan server...")
 	grpcSrv.GracefulStop()
 	log.Info("node: shutdown selesai")
@@ -147,7 +236,7 @@ func registerDenganRetry(
 	cfg config.Config,
 	sessionID string,
 	log *slog.Logger,
-) error {
+) (string, error) {
 	for percobaan := 1; percobaan <= 5; percobaan++ {
 		rCtx, batal := context.WithTimeout(ctx, 5*time.Second)
 		resp, err := client.Register(rCtx, &cluster.RegisterRequest{
@@ -159,23 +248,39 @@ func registerDenganRetry(
 		batal()
 
 		if err == nil && resp.GetAccepted() {
+			assignedID := cfg.NodeID
+			msg := resp.GetMessage()
+			if strings.HasPrefix(msg, "ASSIGNED:") {
+				parts := strings.SplitN(msg[9:], "|", 2)
+				assignedID = parts[0]
+				if len(parts) > 1 && parts[1] != "ok" {
+					log.Warn("peringatan registrasi dari master", slog.String("detail", parts[1]))
+				}
+			}
 			log.Info("terdaftar ke master",
-				slog.String("node_id", cfg.NodeID),
+				slog.String("node_id", assignedID),
 				slog.String("session", sessionID))
-			return nil
+			return assignedID, nil
+		}
+
+		errMsg := "koneksi gagal"
+		if resp != nil && !resp.GetAccepted() {
+			errMsg = resp.GetMessage()
+		} else if err != nil {
+			errMsg = err.Error()
 		}
 
 		log.Warn("registrasi gagal, mencoba ulang",
 			slog.Int("percobaan", percobaan),
-			slog.String("error", fmt.Sprintf("%v", err)))
+			slog.String("alasan", errMsg))
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return "", ctx.Err()
 		case <-time.After(time.Duration(percobaan) * time.Second):
 		}
 	}
-	return fmt.Errorf("semua percobaan registrasi gagal")
+	return "", fmt.Errorf("semua percobaan registrasi gagal")
 }
 
 func loopHeartbeat(
@@ -184,6 +289,8 @@ func loopHeartbeat(
 	cfg config.Config,
 	sessionID string,
 	log *slog.Logger,
+	state *tui.NodeState,
+	evLog *tui.EventLog,
 ) {
 	ticker := time.NewTicker(cfg.HeartbeatInterval)
 	defer ticker.Stop()
@@ -197,21 +304,31 @@ func loopHeartbeat(
 			resp, err := client.Heartbeat(hCtx, &cluster.HeartbeatRequest{
 				NodeId:      cfg.NodeID,
 				SessionId:   sessionID,
-				ActiveTasks: 0,
+				ActiveTasks: int32(state.ActiveTaskCount()),
 			})
 			batal()
 
 			if err != nil {
 				log.Warn("heartbeat error", slog.String("error", err.Error()))
+				state.RecordHeartbeatFailure()
+				evLog.Warn("heartbeat gagal: " + err.Error())
 			} else if !resp.GetOk() {
 				log.Warn("heartbeat ditolak, mendaftar ulang ke master")
-				_ = registerDenganRetry(ctx, client, cfg, sessionID, log)
+				evLog.Warn("heartbeat ditolak — mendaftar ulang")
+				state.RecordHeartbeatFailure()
+				if newID, err := registerDenganRetry(ctx, client, cfg, sessionID, log); err == nil {
+					cfg.NodeID = newID
+					state.SetNodeID(newID)
+					state.RecordHeartbeatSuccess()
+				}
+			} else {
+				state.RecordHeartbeatSuccess()
 			}
 		}
 	}
 }
 
-func monitorNodeMati(ctx context.Context, reg *registry.Registry, sched *scheduler.Scheduler, log *slog.Logger) {
+func monitorNodeMati(ctx context.Context, reg *registry.Registry, sched *scheduler.Scheduler, log *slog.Logger, evLog *tui.EventLog) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -222,11 +339,15 @@ func monitorNodeMati(ctx context.Context, reg *registry.Registry, sched *schedul
 			mati := reg.TickDeadCheck()
 			if len(mati) > 0 {
 				log.Warn("node mati terdeteksi", slog.Any("node_ids", mati))
+				for _, id := range mati {
+					evLog.Warn("node " + id + " dinyatakan mati — task dijadwalkan ulang")
+				}
 				sched.RescheduleDeadNodeTasks(mati)
 			}
 		}
 	}
 }
+
 
 func pembersihJobTTL(ctx context.Context, sched *scheduler.Scheduler, store *storage.Store, ttl time.Duration, log *slog.Logger) {
 	ticker := time.NewTicker(5 * time.Minute)
@@ -258,6 +379,7 @@ type hookPendaftaran struct {
 	nodeClient *rpcpkg.NodeClientAdapter
 	token      string
 	log        *slog.Logger
+	evLog      *tui.EventLog
 }
 
 func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterRequest) (*cluster.RegisterResponse, error) {
@@ -266,18 +388,28 @@ func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterReq
 		return resp, err
 	}
 
+	actualID := req.GetNodeId()
+	msg := resp.GetMessage()
+	if strings.HasPrefix(msg, "ASSIGNED:") {
+		parts := strings.SplitN(msg[9:], "|", 2)
+		actualID = parts[0]
+	}
+
+	h.evLog.Info(fmt.Sprintf("node %s bergabung dari %s", actualID, req.GetAdvertiseAddr()))
+
 	go func() {
 		conn, dialErr := rpcpkg.DialNode(req.GetAdvertiseAddr(), h.token)
 		if dialErr != nil {
 			h.log.Warn("gagal membuka koneksi ke node",
-				slog.String("node_id", req.GetNodeId()),
+				slog.String("node_id", actualID),
 				slog.String("addr", req.GetAdvertiseAddr()),
 				slog.String("error", dialErr.Error()))
+			h.evLog.Warn(fmt.Sprintf("koneksi ke %s gagal: %s", actualID, dialErr.Error()))
 			return
 		}
-		h.nodeClient.SetConn(req.GetNodeId(), conn)
+		h.nodeClient.SetConn(actualID, conn)
 		h.log.Info("koneksi ke node dibuka",
-			slog.String("node_id", req.GetNodeId()),
+			slog.String("node_id", actualID),
 			slog.String("addr", req.GetAdvertiseAddr()))
 	}()
 
