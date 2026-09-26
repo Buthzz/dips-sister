@@ -162,6 +162,31 @@ Riwayat Pemrosesan Task
   2026/09/26 20:45:15 INFO task selesai duration_ms=45 success=true
   ```
 
+### D. Referensi Lengkap Parameter CLI & Variabel Lingkungan
+
+Seluruh parameter pada biner `distapi` dapat dikonfigurasi melalui flag baris perintah atau environment variable (berguna jika ingin disetel otomatis via skrip):
+
+| Parameter / Flag CLI | Environment Variable | Nilai Default | Kegunaan & Untuk Apa Dipakai |
+| :--- | :--- | :--- | :--- |
+| `--mode` | `DISTAPI_MODE` | *(Wajib)* | **Menentukan Peran Node:** Nilai `"master"` (koordinator kluster) atau `"node"` (pekerja komputasi pemroses citra). |
+| `--master` | `DISTAPI_MASTER` | *(Wajib di node)* | **Alamat Master Tujuan:** Format `host:port` gRPC master yang dihubungi oleh node worker (contoh: `192.168.1.10:9000`). |
+| `--token` | `DISTAPI_TOKEN` | `"demo123"` | **Keamanan Kluster:** Kunci rahasia bersama (*shared secret*) untuk autentikasi gRPC agar node asing tidak bisa sembarangan masuk ke kluster. |
+| `--tui` | `DISTAPI_TUI` | `false` | **Tampilan Terminal Interaktif:** Mengaktifkan dashboard visual Bubble Tea (rekomendasi utama saat presentasi demo di kelas). |
+| `--node-id` | `DISTAPI_NODE_ID` | `"auto"` | **Identitas Unik Worker:** Mengatur ID node secara manual, atau biarkan `"auto"` agar dialokasikan otomatis oleh Master (`node-1`, `node-2`, dst). |
+| `--advertise` | `DISTAPI_ADVERTISE` | *Auto-detect IP* | **Alamat Balik Node:** Alamat IP & port yang dilaporkan node ke master agar master tahu ke mana task citra harus dikirim melalui gRPC. |
+| `--http-port` | `DISTAPI_HTTP_PORT` | `8080` | **Port Antarmuka Pengguna:** Port layanan REST API Gateway dan Web UI pada node Master. |
+| `--grpc-port` | `DISTAPI_GRPC_PORT` | `9000` | **Port Komunikasi Kluster:** Port saluran komunikasi biner gRPC berkecepatan tinggi antar-node. |
+| `--workers` | `DISTAPI_WORKERS` | *Jml Core CPU* | **Derajat Paralelisme Lokal:** Jumlah goroutine paralel yang memproses citra secara simultan di dalam satu mesin worker. |
+| `--heartbeat-interval`| `DISTAPI_HEARTBEAT_INTERVAL` | `2s` | **Frekuensi Detak Jantung:** Interval pengiriman sinyal detak jantung dari worker ke master (implementasi Failure Detector Cristian 1991). |
+| `--node-timeout` | `DISTAPI_NODE_TIMEOUT` | `6s` | **Batas Toleransi Kegagalan Node:** Durasi tanpa detak jantung sebelum master menyatakan worker mati (*dead*) dan mengalihkan task-nya ke worker lain. |
+| `--task-timeout` | `DISTAPI_TASK_TIMEOUT` | `30s` | **Batas Waktu Eksekusi Task:** Waktu maksimum untuk memproses satu gambar sebelum dianggap gagal dan dijadwalkan ulang. |
+| `--max-retries` | `DISTAPI_MAX_RETRIES` | `3` | **Toleransi Retry Failover:** Jumlah percobaan ulang task jika worker mendadak crash di tengah komputasi (*At-Least-Once Semantics*). |
+| `--data-dir` | `DISTAPI_DATA_DIR` | `"./data"` | **Direktori Penyimpanan Berkas:** Lokasi penyimpanan gambar sementara dan hasil transformasi citra di disk lokal. |
+| `--max-image-mb` | `DISTAPI_MAX_IMAGE_MB` | `5` | **Batas Ukuran Berkas:** Ukuran maksimum satu file gambar yang diizinkan untuk diunggah (mencegah kehabisan memori RAM). |
+| `--max-images` | `DISTAPI_MAX_IMAGES` | `20` | **Batas Batch Gambar:** Jumlah file maksimum dalam satu kali kirim job pemrosesan. |
+| `--job-ttl` | `DISTAPI_JOB_TTL` | `1h` | **Masa Simpan Riwayat:** Waktu retensi riwayat job di memori Master sebelum dibersihkan secara otomatis. |
+| `--log-level` | `DISTAPI_LOG_LEVEL` | `"info"` | **Kedetilan Catatan Sistem:** Tingkat pencatatan log teks: `debug`, `info`, `warn`, atau `error`. |
+
 ---
 
 ## 3. Spesifikasi Kontrak RESTful API Gateway
