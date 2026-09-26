@@ -231,7 +231,7 @@ func (h *Handler) handleUnduhHasil(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", tipeKonten)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", ukuran))
 	w.Header().Set("Content-Disposition", `attachment; filename="`+namaFile+`"`)
-	io.Copy(w, rc)
+	_, _ = io.Copy(w, rc)
 }
 
 func (h *Handler) handleListNode(w http.ResponseWriter, _ *http.Request) {

@@ -1,29 +1,40 @@
-# distapi — .gitignore
+# Hasil kompilasi binary aplikasi
+dist/distapi.exe
+dist/distapi
 
-# Binary output
-dist/
-
-# Data directory (temporary job files)
-data/
-
-# Materi lokal — tidak dipush ke remote
-tmp/
-
-# Go build cache
+# Berkas pengujian dan coverage laporan
 *.test
+*.out
+coverage.html
 
-# Node.js (frontend dependencies — install with npm ci)
+# Berkas profiling dan tracing pprof Go
+*.prof
+cpu.prof
+mem.prof
+trace.out
+
+# Berkas log saat mode TUI aktif
+distapi-tui.log
+
+# Direktori penyimpanan data job lokal & materi lokal
+data/
+tmp/
+RENCANA/materi/
+*.zip
+
+# Dependensi pustaka Node.js frontend
 web/node_modules/
 
-# Frontend build output — DI-COMMIT agar `go build` berjalan tanpa Node.js
-# (konsisten dengan kebijakan gen/). Regenerasi lewat `make web`.
-
-# IDE
+# Berkas konfigurasi editor dan IDE
 .idea/
 .vscode/
 *.swp
 *~
+.vim/
 
-# OS
+# Berkas metadata sistem operasi
 .DS_Store
+.DS_Store?
 Thumbs.db
+ehthumbs.db
+desktop.ini

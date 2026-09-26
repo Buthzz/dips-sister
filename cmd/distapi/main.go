@@ -162,17 +162,21 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 		slog.String("advertise", cfg.AdvertiseAddr))
 
 	nodeIP := config.DetectLocalIP()
+	nodeIDTeks := cfg.NodeID
+	if nodeIDTeks == "auto" || nodeIDTeks == "" {
+		nodeIDTeks = "auto (menunggu alokasi dari master...)"
+	}
 	if !cfg.TUI {
 		fmt.Printf("\n[distapi Node Worker Aktif]\n"+
 			"  Node ID              : %s\n"+
 			"  IP Node Terdeteksi   : %s\n"+
 			"  Advertise ke Master  : %s\n"+
 			"  Master Tujuan        : %s\n\n",
-			cfg.NodeID, nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr)
+			nodeIDTeks, nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr)
 	}
 
 	evLog := tui.NewEventLog(100)
-	evLog.Info(fmt.Sprintf("node '%s' aktif di IP %s (advertise: %s)", cfg.NodeID, nodeIP, cfg.AdvertiseAddr))
+	evLog.Info(fmt.Sprintf("node aktif di IP %s (advertise: %s, master: %s)", nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr))
 	state := tui.NewNodeState(cfg.NodeID, sessionID, cfg.MasterAddr, cfg.AdvertiseAddr)
 
 	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
@@ -188,6 +192,12 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 	conn, err := rpcpkg.DialNode(cfg.MasterAddr, cfg.Token)
 	if err != nil {
 		log.Error("tidak bisa terhubung ke master", slog.String("error", err.Error()))
+		fmt.Fprintf(os.Stderr, "\n[BANTUAN TROUBLESHOOTING JARINGAN]\n"+
+			"  - Alamat Master: %s\n"+
+			"  - Pastikan proses Master sudah aktif terlebih dahulu.\n"+
+			"  - Jika menggunakan Wi-Fi kampus/lab, periksa apakah ada Client Isolation.\n"+
+			"    Rekomendasi demo: gunakan Windows Mobile Hotspot dari Laptop Master.\n"+
+			"  - Pastikan port 9000 TCP diizinkan di Windows Firewall.\n\n", cfg.MasterAddr)
 		os.Exit(1)
 	}
 	defer conn.Close()
@@ -197,6 +207,14 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 	assignedID, err := registerDenganRetry(ctx, coordClient, cfg, sessionID, log)
 	if err != nil {
 		log.Error("registrasi ke master gagal", slog.String("error", err.Error()))
+		fmt.Fprintf(os.Stderr, "\n[BANTUAN TROUBLESHOOTING JARINGAN]\n"+
+			"  - Gagal registrasi ke Master di %s (5x percobaan timeout/ditolak).\n"+
+			"  - Kemungkinan Penyebab:\n"+
+			"    1. Wi-Fi Isolation: AP router kampus memblokir koneksi antar-laptop.\n"+
+			"       Solusi demo: Aktifkan Windows Mobile Hotspot di Laptop Master (Laptop 1).\n"+
+			"    2. Windows Firewall memblokir port 9000 TCP masuk di Laptop Master.\n"+
+			"    3. Token autentikasi berbeda (default: demo123).\n"+
+			"    4. Laptop berada di subnet/VLAN berbeda.\n\n", cfg.MasterAddr)
 		os.Exit(1)
 	}
 	cfg.NodeID = assignedID

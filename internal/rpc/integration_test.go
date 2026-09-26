@@ -193,7 +193,7 @@ func TestIntegration_ProcessImage(t *testing.T) {
 		ResizeWidth:  5,
 		ResizeHeight: 5,
 		Grayscale:    true,
-	}, grpc.MaxCallRecvMsgSize(8*1024*1024))
+	}, grpc.MaxCallRecvMsgSize(8*1024*1024)) // 8 MB — sesuai maxGRPCMsgSize di rpc.go
 
 	if err != nil {
 		t.Fatalf("ProcessImage RPC gagal: %v", err)

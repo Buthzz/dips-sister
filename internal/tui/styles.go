@@ -67,7 +67,7 @@ func Badge(status string) string {
 		return StyleBadgeGreen.Render("● " + status)
 	case "dead", "FAILED":
 		return StyleBadgeRed.Render("● " + status)
-	case "RUNNING", "PROCESSING":
+	case "RUNNING", "PROCESSING": // "RUNNING" dipakai oleh TaskStatus; "PROCESSING" oleh JobStatus
 		return StyleBadgeAmber.Render("◉ " + status)
 	default:
 		return StyleBadgeSlate.Render("○ " + status)

@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"log/slog"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,13 +18,16 @@ import (
 // mockNodeClient adalah implementasi NodeClient tiruan untuk tes.
 // Bisa dikonfigurasi untuk berhasil (mengembalikan data) atau gagal (mengembalikan error).
 type mockNodeClient struct {
-	hasilData []byte // data yang dikembalikan jika berhasil
-	err       error  // error yang dikembalikan jika gagal
-	panggilanKe int  // hitungan berapa kali ProcessImage dipanggil
+	mu          sync.Mutex
+	hasilData   []byte // data yang dikembalikan jika berhasil
+	err         error  // error yang dikembalikan jika gagal
+	panggilanKe int    // hitungan berapa kali ProcessImage dipanggil
 }
 
 func (m *mockNodeClient) ProcessImage(_ context.Context, _ string, _ *Task, _ []byte, _ ProcessOptions) ([]byte, error) {
+	m.mu.Lock()
 	m.panggilanKe++
+	m.mu.Unlock()
 	return m.hasilData, m.err
 }
 

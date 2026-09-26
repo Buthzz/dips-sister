@@ -1,4 +1,4 @@
-# distapi — Distributed Image Processing
+# distapi - Distributed Image Processing
 
 **Mata Kuliah:** Sistem Terdistribusi (IF2228) · Program Studi Teknik Informatika · Universitas Trunojoyo Madura
 
@@ -37,10 +37,10 @@ flowchart LR
 | **RPC & Interceptor (`rpc`)** | 100% ✅ | Coordinator & Worker service gRPC, auth metadata token, connection pooling |
 | **Pemroses Citra Murni (`worker`)** | 100% ✅ | Nearest-neighbour aspect resizing & grayscale ITU-R BT.601, 9 unit test PASS |
 | **Scatter-Gather Engine (`scheduler`)** | 100% ✅ | Concurrency via goroutines, retry $\le 3$, first-result-wins, 8 unit test PASS |
-| **RESTful Gateway (`api`)** | 100% ✅ | 7 endpoint standar, multipart parser, JSON error envelope, 10 unit test PASS |
+| **RESTful Gateway (`api`)** | 100% ✅ | 8 endpoint standar, multipart parser, JSON error envelope, 10 unit test PASS |
 | **Entry Point Kompilasi (`main.go`)** | 100% ✅ | Composition root, graceful shutdown 10 detik, background monitors |
 | **Kompilasi & Analisis Statik (`go vet`)** | 100% ✅ | **0 Warning, 0 Lint Error**, arsitektur clean tanpa *circular imports* |
-| **Dokumentasi Sistem Terdistribusi (`docs/`)** | 100% ✅ | 9 dokumen komprehensif berstandar industri dengan diagram Mermaid |
+| **Dokumentasi Sistem Terdistribusi (`docs/`)** | 100% ✅ | 2 laporan komprehensif terpadu (Teori/Arsitektur & Panduan Operasional) dengan diagram Mermaid |
 | **Frontend Web Client** | 100% ✅ | Vue 3 + Vite, upload drag-&-drop, daftar & progres job (polling 2s), status node, unduh hasil; di-embed ke binary |
 | **Terminal UI Visual (`tui`)** | 100% ✅ | Antarmuka visual interaktif Bubble Tea & Lip Gloss untuk Master & Node Worker |
 | **Perlindungan Identitas Node** | 100% ✅ | Pencegahan tabrakan node-id duplikat, session hijacking guard, & pemulihan restart |
@@ -78,19 +78,13 @@ go vet ./...         # Analisis statik bawaan Go (Wajib 0 warning)
 go test ./...        # Eksekusi seluruh rangkaian unit test (7 package PASS)
 ```
 
-## Indeks Dokumentasi Mendalam (`docs/`)
+## Dokumentasi Proyek Terpadu (`docs/`)
 
-Seluruh rincian arsitektural, teori komputasi terdistribusi, dan panduan teknis telah didelegasikan ke folder [`docs/`](docs/):
+Dokumentasi sistem telah dirampingkan secara efisien menjadi **dua laporan komprehensif** di folder [`docs/`](docs/) agar memudahkan evaluasi penguji:
 
-| Berkas Dokumentasi | Topik Pembahasan & Relevansi Akademik |
+| Dokumen | Deskripsi & Cakupan Bahasan |
 | :--- | :--- |
-| [`docs/arsitektur.md`](docs/arsitektur.md) | Desain Master-Slave, alur data end-to-end, dan dependency graph antar package |
-| [`docs/rpc-grpc.md`](docs/rpc-grpc.md) | Paradigma Remote Procedure Call, Protocol Buffers, dan semantik At-Least-Once |
-| [`docs/penamaan.md`](docs/penamaan.md) | Pendekatan Home-Based Naming, penanganan mutasi alamat IP, dan sesi dinamis |
-| [`docs/fault-tolerance.md`](docs/fault-tolerance.md) | Failure Model Cristian (1991), deteksi heartbeat, finite state machine task, dan first-result-wins |
-| [`docs/amdahl.md`](docs/amdahl.md) | Analisis teoretis percepatan komputasi paralel Hukum Amdahl & Hukum Gustafson |
-| [`docs/rest-api.md`](docs/rest-api.md) | Spesifikasi formal 7 endpoint REST API, schema payload, kode status, dan contoh PowerShell |
-| [`docs/struktur-project.md`](docs/struktur-project.md) | Pembedahan modularitas kode sumber, batasan arsitektur, dan hierarki direktori |
-| [`docs/setup-windows.md`](docs/setup-windows.md) | Panduan instalasi Go, clone repositori, konfigurasi Windows Firewall, dan kompilasi |
-| [`docs/cara-penggunaan.md`](docs/cara-penggunaan.md) | Manual operasional Windows PowerShell, tahapan startup kluster, dan skenario uji demo |
-| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Matriks mitigasi kegagalan Windows (Firewall, socket in-use, Wi-Fi isolation, NTFS lock) |
+| **[`docs/laporan-sistem.md`](docs/laporan-sistem.md)** | **Laporan Rekayasa & Teori Sistem Terdistribusi**<br>• Pemetaan Silabus Kuliah (Slide 01–06 dosen ke baris kode konkret)<br>• Arsitektur Master-Slave & Alur Data Scatter-Gather<br>• Protokol gRPC, Kontrak Protocol Buffers v3, & Semantik *At-Least-Once*<br>• Home-Based Naming Service & Alokasi Otomatis Node ID<br>• Failure Detector Cristian (1991), FSM Task, & *First-Result-Wins*<br>• Analisis Kinerja Hukum Amdahl ($P = 0.85$)<br>• Panduan Menjawab Pertanyaan Dosen Penguji |
+| **[`docs/panduan-operasional.md`](docs/panduan-operasional.md)** | **Manual Operasional, REST API, & Troubleshooting**<br>• Prasyarat Kompilasi & Aturan Windows Defender Firewall<br>• Panduan Eksekusi Master & Node Worker (CLI / TUI)<br>• Spesifikasi Kontrak 8 Endpoint REST API Gateway & Contoh `curl`<br>• Skenario Uji Demonstrasi Praktis di Kelas (Normal & Failover)<br>• Troubleshooting Windows (Mitigasi Wi-Fi Isolation, Hotspot SOP, Konflik Port) |
+
+

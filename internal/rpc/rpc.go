@@ -14,9 +14,15 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+// maxGRPCMsgSize adalah batas ukuran pesan gRPC (8 MB) yang diberlakukan
+// pada sisi server maupun client. Nilainya dipilih agar gambar berukuran
+// hingga ~5 MB (setelah overhead encoding) tetap dapat diproses dengan aman.
+const maxGRPCMsgSize = 8 * 1024 * 1024
 
 const tokenMetaKey = "x-cluster-token"
 
@@ -211,8 +217,8 @@ func (s *WorkerServer) ProcessImage(_ context.Context, req *cluster.ProcessReque
 func NewGRPCServer(token string) *grpc.Server {
 	return grpc.NewServer(
 		grpc.UnaryInterceptor(UnaryTokenServerInterceptor(token)),
-		grpc.MaxRecvMsgSize(8*1024*1024),
-		grpc.MaxSendMsgSize(8*1024*1024),
+		grpc.MaxRecvMsgSize(maxGRPCMsgSize),
+		grpc.MaxSendMsgSize(maxGRPCMsgSize),
 	)
 }
 
@@ -246,11 +252,11 @@ func ServeGRPC(ctx context.Context, srv *grpc.Server, port int, log *slog.Logger
 func DialNode(addr, token string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		addr,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(UnaryTokenClientInterceptor(token)),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(8*1024*1024),
-			grpc.MaxCallSendMsgSize(8*1024*1024),
+			grpc.MaxCallRecvMsgSize(maxGRPCMsgSize),
+			grpc.MaxCallSendMsgSize(maxGRPCMsgSize),
 		),
 	)
 	if err != nil {

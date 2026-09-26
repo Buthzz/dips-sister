@@ -2,7 +2,6 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -55,8 +54,6 @@ type MasterModel struct {
 	nodes    NodeLister
 	jobs     JobLister
 	log      *EventLog
-	ctx      context.Context
-	cancel   context.CancelFunc
 	masterIP string
 	httpPort int
 	grpcPort int
@@ -72,13 +69,10 @@ type MasterModel struct {
 
 // NewMasterModel membuat model TUI untuk mode master.
 func NewMasterModel(nodes NodeLister, jobs JobLister, log *EventLog, masterIP string, httpPort, grpcPort int, token string) MasterModel {
-	ctx, cancel := context.WithCancel(context.Background())
 	m := MasterModel{
 		nodes:    nodes,
 		jobs:     jobs,
 		log:      log,
-		ctx:      ctx,
-		cancel:   cancel,
 		masterIP: masterIP,
 		httpPort: httpPort,
 		grpcPort: grpcPort,
@@ -153,7 +147,6 @@ func (m MasterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
-			m.cancel()
 			return m, tea.Quit
 		case "tab":
 			m.tab = (m.tab + 1) % 2
@@ -187,7 +180,7 @@ func (m MasterModel) View() string {
 	running, done, failed := 0, 0, 0
 	for _, j := range m.jobSnap {
 		switch j.Status {
-		case "RUNNING", "PROCESSING":
+		case "PROCESSING":
 			running++
 		case "DONE":
 			done++
@@ -362,11 +355,4 @@ func rowStr(widths []int, cols ...string) string {
 		b.WriteString(strings.Repeat(" ", pad))
 	}
 	return b.String()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

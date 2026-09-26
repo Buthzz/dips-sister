@@ -68,15 +68,15 @@ func printCoreHelp(w io.Writer) {
 	fmt.Fprint(w, `distapi — Distributed Image Processing System (Sistem Terdistribusi IF2228)
 
 SINTAKS:
-  distapi --mode=master --token=<token> [opsi...]
-  distapi --mode=node --node-id=<id> --master=<host:port> --token=<token> [opsi...]
+  distapi --mode=master [opsi...]
+  distapi --mode=node --master=<host:port> [opsi...]
   distapi -h | --help
 
 PARAMETER INTI:
   --mode string
         Mode operasional kluster: "master" atau "node" [WAJIB]
   --token string
-        Shared secret token autentikasi gRPC antar-node kluster [WAJIB]
+        Shared secret token autentikasi gRPC antar-node kluster (default "demo123")
   --master string
         Alamat gRPC master tujuan (host:port, misal: 192.168.1.10:9000) [WAJIB pada mode node]
   --node-id string
@@ -95,10 +95,10 @@ PARAMETER INTI:
         Level pencatatan teks: debug | info | warn | error (default "info")
 
 CONTOH OPERASIONAL (PowerShell):
-  * Master Visual TUI : .\dist\distapi.exe --mode=master --token=demo123 --tui
-  * Worker Visual TUI : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123 --tui
-  * Master Mode CLI   : .\dist\distapi.exe --mode=master --token=demo123
-  * Worker Mode CLI   : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123
+  * Master Visual TUI : .\dist\distapi.exe --mode=master --tui
+  * Worker Visual TUI : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --tui
+  * Master Mode CLI   : .\dist\distapi.exe --mode=master
+  * Worker Mode CLI   : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000
 
 DOKUMENTASI LENGKAP:
   Jalankan 'distapi --help' untuk opsi detektor kegagalan, retensi, pengujian curl, & mitigasi firewall.
@@ -125,8 +125,7 @@ PARAMETER UTAMA:
         Mode operasional node: "master" atau "node"
         [WAJIB]
   --token string
-        Shared secret token untuk autentikasi gRPC antar-node kluster
-        [WAJIB di kedua mode]
+        Shared secret token untuk autentikasi gRPC antar-node kluster (default "demo123")
   --master string
         Alamat gRPC master tujuan (format host:port, contoh: 192.168.1.10:9000)
         [WAJIB pada mode node]
@@ -197,7 +196,7 @@ CONTOH PENGUJIAN REST API (curl.exe / PowerShell):
     curl.exe http://localhost:8080/api/v1/nodes/node-1/probe
 
   * Kirim Job Pemrosesan Gambar (Scatter-Gather):
-    curl.exe -X POST http://localhost:8080/api/v1/jobs -F "images=@foto1.jpg" -F "images=@foto2.png" -F "resize_w=400" -F "grayscale=true"
+    curl.exe -X POST http://localhost:8080/api/v1/jobs -F "images=@foto1.jpg" -F "images=@foto2.png" -F "options={\"resize_width\":800,\"resize_height\":800,\"grayscale\":true}"
 
 CATATAN & TROUBLESHOOTING:
   - Setiap opsi CLI dapat dikonfigurasi melalui environment variable dengan prefiks
@@ -241,7 +240,7 @@ func Parse() Config {
 	nodeID := fs.String("node-id", envOr("NODE_ID", "auto"), "identitas unik node (default 'auto': dialokasikan otomatis oleh master)")
 	masterAddr := fs.String("master", envOr("MASTER_ADDR", ""), "alamat gRPC master (host:port)")
 	advertise := fs.String("advertise", envOr("ADVERTISE_ADDR", ""), "alamat gRPC node yang dapat dijangkau master")
-	token := fs.String("token", envOr("TOKEN", ""), "shared secret autentikasi cluster")
+	token := fs.String("token", envOr("TOKEN", "demo123"), "shared secret autentikasi cluster (default 'demo123')")
 	workers := fs.Int("workers", envOrInt("WORKERS", 0), "jumlah worker goroutine (0 = otomatis)")
 	dataDir := fs.String("data-dir", envOr("DATA_DIR", "./data"), "direktori penyimpanan berkas sementara")
 	maxImgMB := fs.Int("max-image-mb", envOrInt("MAX_IMAGE_MB", 5), "ukuran maksimum satu berkas gambar (MB)")
@@ -271,8 +270,8 @@ func Parse() Config {
 		errs = append(errs, "flag --mode harus bernilai 'master' atau 'node'")
 	}
 
-	if *token == "" {
-		errs = append(errs, "flag --token wajib diisi")
+	if strings.TrimSpace(*token) == "" {
+		errs = append(errs, "flag --token tidak boleh kosong")
 	}
 	if m == ModeNode && *masterAddr == "" {
 		errs = append(errs, "flag --master wajib diisi saat mode node")

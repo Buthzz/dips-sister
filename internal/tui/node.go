@@ -2,7 +2,6 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -157,8 +156,6 @@ func (s *NodeState) Snapshot() NodeStateSnapshot {
 type NodeModel struct {
 	state    *NodeState
 	log      *EventLog
-	ctx      context.Context
-	cancel   context.CancelFunc
 	width    int
 	height   int
 	quitting bool
@@ -166,12 +163,9 @@ type NodeModel struct {
 
 // NewNodeModel membuat model TUI untuk mode node.
 func NewNodeModel(state *NodeState, log *EventLog) NodeModel {
-	ctx, cancel := context.WithCancel(context.Background())
 	return NodeModel{
 		state:  state,
 		log:    log,
-		ctx:    ctx,
-		cancel: cancel,
 		width:  100,
 		height: 32,
 	}
@@ -194,7 +188,6 @@ func (m NodeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.quitting = true
-			m.cancel()
 			return m, tea.Quit
 		}
 	}
@@ -266,8 +259,12 @@ func (m NodeModel) View() string {
 	b.WriteString("  " + StyleMuted.Render(strings.Repeat("-", 80)) + "\n")
 
 	hist := s.TaskHistory
-	if len(hist) > 6 {
-		hist = hist[len(hist)-6:]
+	maxHist := 6
+	if m.height < 32 {
+		maxHist = 3
+	}
+	if len(hist) > maxHist {
+		hist = hist[len(hist)-maxHist:]
 	}
 	if len(hist) == 0 {
 		b.WriteString(StyleMuted.Render("  Belum ada task selesai diproses.\n"))
@@ -284,7 +281,7 @@ func (m NodeModel) View() string {
 
 	b.WriteString(StyleCardTitle.Render("Log Node") + "\n")
 	entries := m.log.Snapshot()
-	maxLines := m.height - 28
+	maxLines := m.height - 25
 	if maxLines < 3 {
 		maxLines = 3
 	}

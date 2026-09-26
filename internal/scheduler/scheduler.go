@@ -57,8 +57,9 @@ type Job struct {
 	Tasks     []*Task
 	Status    JobStatus
 	CreatedAt time.Time
-	DoneAt    time.Time
-	Options   ProcessOptions
+	DoneAt      time.Time
+	Options     ProcessOptions
+	dispatching bool
 }
 
 // ProcessOptions memuat parameter transformasi citra.
@@ -144,9 +145,10 @@ func (s *Scheduler) Submit(ctx context.Context, filenames []string, imageData []
 		slog.String("job_id", jobID),
 		slog.Int("tasks", len(tasks)))
 
+	cp := *job
 	go s.dispatchJob(context.Background(), job)
 
-	return job, nil
+	return &cp, nil
 }
 
 // GetJob mengambil snapshot data job berdasarkan ID-nya.
@@ -173,6 +175,11 @@ func (s *Scheduler) ListJobs() []*Job {
 	out := make([]*Job, 0, len(s.jobs))
 	for _, j := range s.jobs {
 		cp := *j
+		cp.Tasks = make([]*Task, len(j.Tasks))
+		for i, t := range j.Tasks {
+			tc := *t
+			cp.Tasks[i] = &tc
+		}
 		out = append(out, &cp)
 	}
 	for i := 1; i < len(out); i++ {
@@ -234,8 +241,19 @@ func (s *Scheduler) RescheduleDeadNodeTasks(deadNodeIDs []string) {
 
 func (s *Scheduler) dispatchJob(ctx context.Context, job *Job) {
 	s.mu.Lock()
+	if job.dispatching {
+		s.mu.Unlock()
+		return
+	}
+	job.dispatching = true
 	job.Status = JobProcessing
 	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		job.dispatching = false
+		s.mu.Unlock()
+	}()
 
 	var wg sync.WaitGroup
 	for _, t := range job.Tasks {
@@ -254,6 +272,7 @@ func (s *Scheduler) dispatchJob(ctx context.Context, job *Job) {
 	}
 	wg.Wait()
 
+	var finalStatus JobStatus
 	s.mu.Lock()
 	adaFailed := false
 	semuaDone := true
@@ -272,11 +291,12 @@ func (s *Scheduler) dispatchJob(ctx context.Context, job *Job) {
 		job.Status = JobFailed
 		job.DoneAt = time.Now()
 	}
+	finalStatus = job.Status
 	s.mu.Unlock()
 
 	s.log.Info("job selesai",
 		slog.String("job_id", job.ID),
-		slog.String("status", string(job.Status)))
+		slog.String("status", string(finalStatus)))
 }
 
 func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
@@ -351,16 +371,18 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 			}
 		}
 
+		var durMs int64
 		s.mu.Lock()
 		task.Status = TaskDone
 		task.DoneAt = time.Now()
 		task.DurationMs = time.Since(task.StartedAt).Milliseconds()
+		durMs = task.DurationMs
 		s.mu.Unlock()
 
 		s.log.Info("task berhasil",
 			slog.String("task_id", task.ID),
 			slog.String("node_id", node.NodeID),
-			slog.Int64("duration_ms", task.DurationMs))
+			slog.Int64("duration_ms", durMs))
 		return
 	}
 }
