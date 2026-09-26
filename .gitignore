@@ -1,6 +1,5 @@
 # Hasil kompilasi binary aplikasi
-dist/distapi.exe
-dist/distapi
+dist/
 
 # Berkas pengujian dan coverage laporan
 *.test
