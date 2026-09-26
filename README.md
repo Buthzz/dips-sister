@@ -48,17 +48,23 @@ flowchart LR
 
 > **Estimasi Progres Keseluruhan:** **100%** (Seluruh komponen — fondasi backend, engine konkurensi, failure detector, frontend web, terminal UI, dokumentasi akademik, dan pengujian fisik kluster — telah rampung dan terverifikasi).
 
-## Panduan Cepat Eksekusi (Windows PowerShell)
+## Panduan Cepat Eksekusi
+
+```bash
+# 1. Kompilasi Otomatis Sekali Jalan (Menghasilkan biner Windows & Linux sekaligus):
+./build.sh          # Linux / macOS / Git Bash
+.\build.ps1         # Windows PowerShell (atau jalankan build.bat di CMD)
+make build          # Alternatif via Makefile
+```
 
 ```powershell
-# 1. Kompilasi Binary Native Windows (frontend otomatis di-embed)
-go build -o dist\distapi.exe .\cmd\distapi
-
 # 2. Jalankan Laptop 1 (Master) — IP fisik otomatis terdeteksi tanpa ipconfig
 .\dist\distapi.exe --mode=master --token=demo123 --tui
+# (atau di Linux: ./dist/distapi --mode=master --token=demo123 --tui)
 
 # 3. Jalankan Laptop 2, 3, 4 (Node Worker) — Node ID otomatis dialokasikan master (node-1, node-2, node-3)
 .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123 --tui
+# (atau di Linux: ./dist/distapi --mode=node --master=192.168.1.10:9000 --token=demo123 --tui)
 ```
 
 > **Tingkatan Bantuan CLI:**

@@ -42,14 +42,17 @@ New-NetFirewallRule -DisplayName "distapi HTTP" -Direction Inbound -Protocol TCP
 
 ## 2. Kompilasi & Urutan Eksekusi Kluster
 
-### Langkah 1: Kompilasi Binary Mandiri (Laptop 1)
-Jalankan perintah berikut pada folder root project:
+### Langkah 1: Kompilasi Binary Mandiri Sekali Jalan
+Jalankan script kompilasi otomatis pada folder root project:
 
 ```powershell
-go build -o dist\distapi.exe .\cmd\distapi
+# Di Windows PowerShell:
+.\build.ps1
+
+# (atau di Linux / macOS / Git Bash: ./build.sh, atau via: make build)
 ```
 
-File `dist\distapi.exe` yang dihasilkan telah membungkus seluruh logika backend dan frontend Web Vue 3 secara *self-contained* via `//go:embed`. Cukup salin satu berkas `distapi.exe` ini via USB Flashdisk ke Laptop 2, 3, dan 4.
+Script di atas otomatis mengompilasi biner mandiri (*cross-compile*) untuk Windows (`dist\distapi.exe`) dan Linux (`dist/distapi`) dengan seluruh logika backend dan frontend Web Vue 3 ter-embed secara *self-contained* via `//go:embed`. Cukup salin berkas `distapi.exe` via USB Flashdisk ke Laptop 2, 3, dan 4.
 
 ### Langkah 2: Jalankan Laptop 1 (Master Node)
 Buka PowerShell pada Laptop 1 dan jalankan:
