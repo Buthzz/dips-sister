@@ -75,6 +75,90 @@ Seluruh laptop worker dapat mengeksekusi **perintah yang sama persis** tanpa per
 * **Laptop 4** $\rightarrow$ terkonfirmasi sebagai `node-3`.
 *(Catatan: Token autentikasi default adalah `demo123`. Flag `--token` opsional kecuali diubah).*
 
+### Visual Preview Antarmuka Terminal
+
+#### A. Tampilan Dashboard Laptop 1 (Master — Mode Visual TUI)
+```text
+ distapi  MASTER   192.168.1.10:9000  (3/3 node aktif)   Web UI: http://192.168.1.10:8080   20:45:10
+  Perintah Laptop Worker: .\distapi.exe --mode=node --master=192.168.1.10:9000 --tui
+
+  Node & Job    Log Aktivitas  
+
+Status Node
+Node ID        Alamat                  Status       Task Aktif   Kapasitas   Heartbeat       
+---------------------------------------------------------------------------------------------
+node-1         192.168.1.11:9000       ● alive      0            8           1s lalu         
+node-2         192.168.1.12:9000       ● alive      0            8           1s lalu         
+node-3         192.168.1.13:9000       ● alive      0            8           2s lalu         
+
+Status Job
+Job ID                    Status       Progres      Gagal        Dibuat           
+---------------------------------------------------------------------------------------------
+job_64fa10b93d8e012a      DONE         12/12        0            25s lalu        
+
+[tab] ganti panel   [↑/↓] navigasi node   [q] keluar
+```
+
+#### B. Tampilan Dashboard Laptop 2 (Worker Node-1 — Mode Visual TUI)
+```text
+ distapi  NODE   node-1   ● Terhubung   20:45:12
+
+Informasi Node
+  Node ID:               node-1
+  Session:               a4f109bc
+  Master:                192.168.1.10:9000
+  Advertise:             192.168.1.11:9000
+  Heartbeat terakhir:    1s lalu
+  Total HB terkirim:     42
+  Task aktif / selesai:  0 / 4
+
+Riwayat Pemrosesan Task
+  Waktu       Task ID                      Nama Berkas            Durasi       Status     
+  ----------------------------------------------------------------------------------------
+  20:45:08    job_64fa10b9-000             foto1.jpg              45 ms        ● DONE     
+  20:45:09    job_64fa10b9-003             foto4.jpg              52 ms        ● DONE     
+  20:45:09    job_64fa10b9-006             foto7.jpg              48 ms        ● DONE     
+  20:45:10    job_64fa10b9-009             foto10.jpg             50 ms        ● DONE     
+
+[q] keluar
+```
+
+#### C. Tampilan Mode CLI Standar (Tanpa Flag `--tui`)
+
+* **Pada Laptop 1 (Master):**
+  ```text
+  [distapi Master Aktif]
+    IP Master Terdeteksi : 192.168.1.10
+    Web UI / REST API    : http://192.168.1.10:8080 (atau http://localhost:8080)
+    gRPC Cluster Port    : 192.168.1.10:9000
+
+  Perintah yang dapat disalin untuk laptop Node Worker:
+    .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --tui
+
+  2026/09/26 20:45:00 INFO master aktif di 192.168.1.10:9000 (HTTP :8080)
+  2026/09/26 20:45:05 INFO node terdaftar node_id=node-1 addr=192.168.1.11:9000 capacity=8
+  2026/09/26 20:45:07 INFO node terdaftar node_id=node-2 addr=192.168.1.12:9000 capacity=8
+  2026/09/26 20:45:09 INFO node terdaftar node_id=node-3 addr=192.168.1.13:9000 capacity=8
+  ```
+
+* **Pada Laptop 2 (Worker):**
+  ```text
+  [distapi Node Worker Aktif]
+    Node ID              : auto (menunggu alokasi dari master...)
+    IP Node Terdeteksi   : 192.168.1.11
+    Advertise ke Master  : 192.168.1.11:9000
+    Master Tujuan        : 192.168.1.10:9000
+
+  [Node Terdaftar ke Master]
+    Identitas Terkonfirmasi : node-1
+    Alamat Advertise        : 192.168.1.11:9000
+    Master Hubungan         : 192.168.1.10:9000
+
+  2026/09/26 20:45:05 INFO terdaftar ke master node_id=node-1 session=a4f109bc
+  2026/09/26 20:45:15 INFO mulai ProcessImage task_id=job_64fa10b9-000 filename=foto1.jpg
+  2026/09/26 20:45:15 INFO task selesai duration_ms=45 success=true
+  ```
+
 ---
 
 ## 3. Spesifikasi Kontrak RESTful API Gateway
