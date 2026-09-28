@@ -1,41 +1,42 @@
-.PHONY: all build build-all build-linux build-windows test vet check proto clean run-master run-web web
+.PHONY: all build build-all build-linux build-windows test vet check proto clean run-master run-web web team
 
-# Direktori output binary
 DIST := dist
 CMD  := ./cmd/distapi
 
-# Target default: vet + test + build
+# Target default: uji kode dan kompilasi biner
 all: check build
 
-# Build output frontend Vue (opsional, jika ingin mengompilasi ulang aset web)
+# Kompilasi aset frontend Vue (opsional, jika aset web diubah)
 web:
 	cd web && npm install && npm run build
 
-# Build kedua binary (Linux dan Windows)
+# Kompilasi biner untuk Linux dan Windows
 build: build-all
 
 build-all: build-linux build-windows
 
+# Biner Linux (amd64): statis murni tanpa dependensi C/glibc, ukuran diminimalkan (-s -w)
 build-linux:
 	@mkdir -p $(DIST)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o $(DIST)/distapi $(CMD)
 
+# Biner Windows (amd64): eksekusi mandiri untuk node berbasis Windows
 build-windows:
 	@mkdir -p $(DIST)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o $(DIST)/distapi.exe $(CMD)
 
-# Jalankan semua unit test
+# Jalankan seluruh unit test
 test:
 	go test ./...
 
-# go vet: analisis statik bawaan Go — wajib hijau sebelum commit
+# Analisis statis kode Go
 vet:
 	go vet ./...
 
-# check = vet + test (jalankan ini sebelum push ke repo)
+# Quality gate: wajib lolos sebelum commit / push
 check: vet test
 
-# Regenerasi kode dari .proto (butuh protoc + protoc-gen-go + protoc-gen-go-grpc di PATH)
+# Kompilasi ulang protobuf (memerlukan protoc, protoc-gen-go, protoc-gen-go-grpc)
 proto:
 	protoc \
 		--go_out=gen --go_opt=paths=source_relative \
@@ -47,12 +48,11 @@ run-master:
 	go run $(CMD) --mode=master --http-port=8080 --grpc-port=9000 \
 		--token=demo123 --log-level=debug
 
-# Jalankan Vite dev server (proxy /api => http://localhost:8080)
+# Jalankan dev server frontend Vite (proxy /api ke master)
 run-web:
 	cd web && npm install && npm run dev
 
-# Jalankan node lokal (ganti MASTER_IP jika beda mesin)
-# Contoh: NODE_ID=node-1 MASTER_IP=192.168.1.10 make run-node
+# Jalankan node lokal (contoh: NODE_ID=node-1 MASTER_IP=192.168.1.10 make run-node)
 run-node:
 	go run $(CMD) --mode=node \
 		--node-id=$(NODE_ID) \
@@ -61,6 +61,10 @@ run-node:
 		--token=demo123 \
 		--log-level=debug
 
-# Bersihkan output build
+# Bersihkan artefak kompilasi dan data runtime lokal
 clean:
 	rm -rf $(DIST) data
+
+# Tampilkan daftar tim pengembang
+team:
+	@go run $(CMD) team

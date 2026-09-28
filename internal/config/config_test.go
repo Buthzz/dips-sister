@@ -3,6 +3,7 @@ package config
 import (
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +35,37 @@ func TestEnvOr(t *testing.T) {
 
 	if got := envOr("TEST_KEY_XYZ", "default"); got != "dari-env" {
 		t.Errorf("envOr dengan env: mau 'dari-env', dapat %q", got)
+	}
+}
+
+// TestEnvOrFallback memastikan envOrFallback mengutamakan primary key, fallback ke secondary, dan default jika kosong.
+func TestEnvOrFallback(t *testing.T) {
+	const (
+		primaryKey   = "DISTAPI_TEST_PRIMARY_XYZ"
+		secondaryKey = "DISTAPI_TEST_SECONDARY_XYZ"
+	)
+	os.Unsetenv(primaryKey)
+	os.Unsetenv(secondaryKey)
+
+	// Kasus 1: Keduanya kosong -> default
+	if got := envOrFallback("TEST_PRIMARY_XYZ", "TEST_SECONDARY_XYZ", "def"); got != "def" {
+		t.Errorf("mau 'def', dapat %q", got)
+	}
+
+	// Kasus 2: Secondary terisi -> ambil secondary
+	os.Setenv(secondaryKey, "nilai-secondary")
+	if got := envOrFallback("TEST_PRIMARY_XYZ", "TEST_SECONDARY_XYZ", "def"); got != "nilai-secondary" {
+		t.Errorf("mau 'nilai-secondary', dapat %q", got)
+	}
+
+	// Kasus 3: Primary terisi -> prioritaskan primary
+	os.Setenv(primaryKey, "nilai-primary")
+	defer func() {
+		os.Unsetenv(primaryKey)
+		os.Unsetenv(secondaryKey)
+	}()
+	if got := envOrFallback("TEST_PRIMARY_XYZ", "TEST_SECONDARY_XYZ", "def"); got != "nilai-primary" {
+		t.Errorf("mau 'nilai-primary', dapat %q", got)
 	}
 }
 
@@ -124,5 +156,54 @@ func TestMaxInt(t *testing.T) {
 	}
 	if maxInt(4, 4) != 4 {
 		t.Error("maxInt(4,4) harus 4")
+	}
+}
+
+// TestPrintTeam memastikan PrintTeam memuat seluruh nama dan NIM anggota tanpa rincian tugas.
+func TestPrintTeam(t *testing.T) {
+	var buf strings.Builder
+	PrintTeam(&buf)
+	out := buf.String()
+
+	names := []string{
+		"Rafli Khiyanuran Bazhari",
+		"Irma Annisatul Jannah",
+		"Muhammad Fajar Nugroho",
+		"Zakaria Mujur Prasetyo",
+	}
+	for _, name := range names {
+		if !strings.Contains(out, name) {
+			t.Errorf("PrintTeam harus memuat nama %q", name)
+		}
+	}
+
+	nims := []string{
+		"240411100001",
+		"240411100014",
+		"240411100103",
+		"240411100144",
+	}
+	for _, nim := range nims {
+		if !strings.Contains(out, nim) {
+			t.Errorf("PrintTeam harus memuat NIM %q", nim)
+		}
+	}
+
+	// Memastikan tidak mencantumkan peran / tugas individu
+	lower := strings.ToLower(out)
+	larangan := []string{"scheduler orchestrator", "scatter-gather", "rpc layer", "gateway"}
+	for _, l := range larangan {
+		if strings.Contains(lower, l) {
+			t.Errorf("PrintTeam tidak boleh memuat rincian tugas: %q", l)
+		}
+	}
+}
+
+// TestPrintVersion memastikan PrintVersion mencetak versi aplikasi.
+func TestPrintVersion(t *testing.T) {
+	var buf strings.Builder
+	PrintVersion(&buf)
+	if !strings.Contains(buf.String(), "v0.1.0") {
+		t.Errorf("PrintVersion harus memuat versi v0.1.0, dapat %q", buf.String())
 	}
 }

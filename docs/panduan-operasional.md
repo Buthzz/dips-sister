@@ -169,11 +169,11 @@ Seluruh parameter pada biner `distapi` dapat dikonfigurasi melalui flag baris pe
 | Parameter / Flag CLI | Environment Variable | Nilai Default | Kegunaan & Untuk Apa Dipakai |
 | :--- | :--- | :--- | :--- |
 | `--mode` | `DISTAPI_MODE` | *(Wajib)* | **Menentukan Peran Node:** Nilai `"master"` (koordinator kluster) atau `"node"` (pekerja komputasi pemroses citra). |
-| `--master` | `DISTAPI_MASTER` | *(Wajib di node)* | **Alamat Master Tujuan:** Format `host:port` gRPC master yang dihubungi oleh node worker (contoh: `192.168.1.10:9000`). |
+| `--master` | `DISTAPI_MASTER` / `DISTAPI_MASTER_ADDR` | *(Wajib di node)* | **Alamat Master Tujuan:** Format `host:port` gRPC master yang dihubungi oleh node worker (contoh: `192.168.1.10:9000`). |
 | `--token` | `DISTAPI_TOKEN` | `"demo123"` | **Keamanan Kluster:** Kunci rahasia bersama (*shared secret*) untuk autentikasi gRPC agar node asing tidak bisa sembarangan masuk ke kluster. |
 | `--tui` | `DISTAPI_TUI` | `false` | **Tampilan Terminal Interaktif:** Mengaktifkan dashboard visual Bubble Tea (rekomendasi utama saat presentasi demo di kelas). |
 | `--node-id` | `DISTAPI_NODE_ID` | `"auto"` | **Identitas Unik Worker:** Mengatur ID node secara manual, atau biarkan `"auto"` agar dialokasikan otomatis oleh Master (`node-1`, `node-2`, dst). |
-| `--advertise` | `DISTAPI_ADVERTISE` | *Auto-detect IP* | **Alamat Balik Node:** Alamat IP & port yang dilaporkan node ke master agar master tahu ke mana task citra harus dikirim melalui gRPC. |
+| `--advertise` | `DISTAPI_ADVERTISE` / `DISTAPI_ADVERTISE_ADDR` | *Auto-detect IP* | **Alamat Balik Node:** Alamat IP & port yang dilaporkan node ke master agar master tahu ke mana task citra harus dikirim melalui gRPC. |
 | `--http-port` | `DISTAPI_HTTP_PORT` | `8080` | **Port Antarmuka Pengguna:** Port layanan REST API Gateway dan Web UI pada node Master. |
 | `--grpc-port` | `DISTAPI_GRPC_PORT` | `9000` | **Port Komunikasi Kluster:** Port saluran komunikasi biner gRPC berkecepatan tinggi antar-node. |
 | `--workers` | `DISTAPI_WORKERS` | *Jml Core CPU* | **Derajat Paralelisme Lokal:** Jumlah goroutine paralel yang memproses citra secara simultan di dalam satu mesin worker. |
@@ -186,6 +186,15 @@ Seluruh parameter pada biner `distapi` dapat dikonfigurasi melalui flag baris pe
 | `--max-images` | `DISTAPI_MAX_IMAGES` | `20` | **Batas Batch Gambar:** Jumlah file maksimum dalam satu kali kirim job pemrosesan. |
 | `--job-ttl` | `DISTAPI_JOB_TTL` | `1h` | **Masa Simpan Riwayat:** Waktu retensi riwayat job di memori Master sebelum dibersihkan secara otomatis. |
 | `--log-level` | `DISTAPI_LOG_LEVEL` | `"info"` | **Kedetilan Catatan Sistem:** Tingkat pencatatan log teks: `debug`, `info`, `warn`, atau `error`. |
+
+#### Perintah Informasi & Bantuan Tambahan
+
+| Perintah / Subcommand | Alias Alternatif | Kegunaan |
+| :--- | :--- | :--- |
+| `distapi team` | `authors`, `about`, `credits`, `--team` | Menampilkan daftar nama tim pengembang dan NIM tanpa rincian pembagian tugas. |
+| `distapi --version` | `version`, `-v` | Menampilkan nomor versi aplikasi saat ini (`distapi v0.1.0`). |
+| `distapi -h` | `-help` | Menampilkan ringkasan parameter inti dan sintaks dasar. |
+| `distapi --help` | `help` | Menampilkan dokumentasi lengkap, detektor kegagalan, contoh curl, dan mitigasi firewall. |
 
 ---
 

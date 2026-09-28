@@ -2,55 +2,66 @@ syntax = "proto3";
 package cluster;
 option go_package = "distapi/gen/cluster";
 
-// Runs on MASTER, called by NODE
+// Layanan Coordinator: Bertanggung jawab atas orkestrasi dan pendaftaran kluster.
+// Berjalan di MASTER, dipanggil oleh NODE worker (Arah: Worker -> Master).
 service Coordinator {
+  // Mendaftarkan node worker baru atau node yang baru restart ke master.
   rpc Register(RegisterRequest)   returns (RegisterResponse);
+  // Mengirim sinyal detak jantung (heartbeat) secara periodik dari node ke master.
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
 
-// Runs on every NODE (and master's local worker), called by MASTER
+// Layanan Worker: Bertanggung jawab atas eksekusi pemrosesan komputasi citra.
+// Berjalan di setiap NODE (dan worker lokal master), dipanggil oleh MASTER (Arah: Master -> Worker).
 service Worker {
+  // Memproses tugas transformasi citra (resize dan/atau grayscale).
   rpc ProcessImage(ProcessRequest) returns (ProcessResponse);
 }
 
+// Permintaan registrasi node worker ke master saat inisialisasi atau restart.
 message RegisterRequest {
-  string node_id        = 1;
-  string session_id     = 2; // random per-start; distinguishes restarts
-  string advertise_addr = 3; // IP:port reachable by master
-  int32  capacity       = 4; // max concurrent tasks
+  string node_id        = 1; // ID node unik (misal: "node-1" atau "auto" untuk alokasi otomatis)
+  string session_id     = 2; // Acak per-start; membedakan instance yang baru restart
+  string advertise_addr = 3; // Alamat IP:port yang dapat dijangkau oleh master
+  int32  capacity       = 4; // Batas kapasitas maksimum tugas konkuren (bersamaan)
 }
 
+// Respons dari master atas permintaan registrasi worker.
 message RegisterResponse {
-  bool   accepted = 1;
-  string message  = 2;
+  bool   accepted = 1; // Menunjukkan apakah registrasi disetujui oleh master
+  string message  = 2; // Pesan status atau informasi alokasi ID dari master
 }
 
+// Permintaan detak jantung (heartbeat) berkala untuk memantau status kesehatan (liveness) node.
 message HeartbeatRequest {
-  string node_id      = 1;
-  string session_id   = 2;
-  int32  active_tasks = 3;
+  string node_id      = 1; // ID node pengirim heartbeat
+  string session_id   = 2; // ID sesi aktif untuk mendeteksi restart node
+  int32  active_tasks = 3; // Jumlah tugas yang sedang aktif diproses oleh node
 }
 
+// Respons detak jantung dari master ke worker.
 message HeartbeatResponse {
-  bool ok = 1;
+  bool ok = 1; // Bernilai true jika heartbeat diterima dan sesi node valid
 }
 
+// Permintaan pemrosesan citra dari master ke node worker (Scatter).
 message ProcessRequest {
-  string task_id       = 1;
-  string job_id        = 2;
-  int32  image_index   = 3;
-  bytes  image_data    = 4;
-  string filename      = 5;
-  int32  resize_width  = 6; // 0 = keep original
-  int32  resize_height = 7; // 0 = keep original
-  bool   grayscale     = 8;
+  string task_id       = 1; // ID unik tugas pemrosesan
+  string job_id        = 2; // ID pekerjaan (batch) induk
+  int32  image_index   = 3; // Indeks urutan gambar dalam batch job
+  bytes  image_data    = 4; // Data biner berkas citra asli
+  string filename      = 5; // Nama berkas citra
+  int32  resize_width  = 6; // Lebar target dalam piksel (0 = pertahankan ukuran asli)
+  int32  resize_height = 7; // Tinggi target dalam piksel (0 = pertahankan ukuran asli)
+  bool   grayscale     = 8; // Konversi citra ke grayscale jika bernilai true
 }
 
+// Respons hasil pemrosesan citra dari node worker ke master (Gather).
 message ProcessResponse {
-  string task_id     = 1;
-  bool   success     = 2;
-  bytes  result_data = 3;
-  string filename    = 4;
-  string error       = 5;
-  int64  duration_ms = 6;
+  string task_id     = 1; // ID unik tugas yang selesai diproses
+  bool   success     = 2; // Status keberhasilan transformasi citra
+  bytes  result_data = 3; // Data biner citra hasil transformasi
+  string filename    = 4; // Nama berkas citra hasil pemrosesan
+  string error       = 5; // Pesan galat jika pemrosesan gagal (kosong jika sukses)
+  int64  duration_ms = 6; // Durasi eksekusi pemrosesan di worker dalam milidetik
 }

@@ -45,6 +45,25 @@ type Config struct {
 	TUI               bool
 }
 
+// PrintTeam mencetak daftar nama pengembang tanpa rincian pembagian tugas.
+func PrintTeam(w io.Writer) {
+	fmt.Fprint(w, `distapi — Distributed Image Processing System
+Sistem Terdistribusi (IF2228) · Teknik Informatika · Universitas Trunojoyo Madura
+
+TIM PENGEMBANG:
+  No  NIM           Nama
+  1   240411100001  Rafli Khiyanuran Bazhari
+  2   240411100014  Irma Annisatul Jannah
+  3   240411100103  Muhammad Fajar Nugroho
+  4   240411100144  Zakaria Mujur Prasetyo
+`)
+}
+
+// PrintVersion mencetak nomor versi aplikasi.
+func PrintVersion(w io.Writer) {
+	fmt.Fprintln(w, "distapi v0.1.0")
+}
+
 // printQuickExamples mencetak contoh penggunaan singkat saat biner dijalankan tanpa argumen.
 func printQuickExamples(w io.Writer) {
 	fmt.Fprint(w, `distapi — Distributed Image Processing System (Sistem Terdistribusi IF2228)
@@ -57,9 +76,10 @@ CONTOH PENGGUNAAN CEPAT:
   2. Jalankan Laptop 2, 3, 4 sebagai Node Worker:
      .\dist\distapi.exe --mode=node --master=<IP_MASTER>:9000 --token=demo123 --tui
 
-BANTUAN & PANDUAN:
+BANTUAN & INFORMASI:
   .\distapi.exe -h       Tampilkan parameter inti dan opsi umum
   .\distapi.exe --help   Tampilkan seluruh parameter teknis, REST API, & troubleshooting
+  .\distapi.exe team     Tampilkan daftar nama tim pengembang
 `)
 }
 
@@ -70,7 +90,8 @@ func printCoreHelp(w io.Writer) {
 SINTAKS:
   distapi --mode=master [opsi...]
   distapi --mode=node --master=<host:port> [opsi...]
-  distapi -h | --help
+  distapi team | authors
+  distapi -h | --help | --version
 
 PARAMETER INTI:
   --mode string
@@ -93,6 +114,10 @@ PARAMETER INTI:
         Port komunikasi protokol biner gRPC (default 9000)
   --log-level string
         Level pencatatan teks: debug | info | warn | error (default "info")
+
+PERINTAH INFORMASI:
+  distapi team        Tampilkan daftar nama tim pengembang (alias: authors, about)
+  distapi --version   Tampilkan versi aplikasi (alias: -v, version)
 
 CONTOH OPERASIONAL (PowerShell):
   * Master Visual TUI : .\dist\distapi.exe --mode=master --tui
@@ -118,7 +143,14 @@ DESKRIPSI:
 SINTAKS:
   distapi --mode=master [opsi...]
   distapi --mode=node --master=<host:port> [opsi...]
+  distapi team | authors | version
   distapi -h | --help | help
+
+SUB-PERINTAH & INFORMASI:
+  team, authors, about
+        Tampilkan daftar nama anggota tim pengembang
+  version, --version, -v
+        Tampilkan nomor versi rilis aplikasi
 
 PARAMETER UTAMA:
   --mode string
@@ -216,10 +248,25 @@ func Parse() Config {
 		os.Exit(0)
 	}
 
-	// Deteksi flag bantuan sebelum parsing flag
+	// Deteksi sub-perintah posisi pertama (subcommand mandiri, misal: distapi team)
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+		switch strings.ToLower(os.Args[1]) {
+		case "team", "authors", "about", "credits":
+			PrintTeam(os.Stdout)
+			os.Exit(0)
+		case "version":
+			PrintVersion(os.Stdout)
+			os.Exit(0)
+		case "help":
+			printFullHelp(os.Stdout)
+			os.Exit(0)
+		}
+	}
+
+	// Deteksi eksplisit flag bantuan sebelum parsing flag
 	for _, arg := range os.Args[1:] {
 		low := strings.ToLower(arg)
-		if low == "--help" || low == "help" {
+		if low == "--help" {
 			printFullHelp(os.Stdout)
 			os.Exit(0)
 		}
@@ -234,12 +281,18 @@ func Parse() Config {
 		printCoreHelp(fs.Output())
 	}
 
+	showTeam := fs.Bool("team", false, "tampilkan daftar nama tim pengembang")
+	fs.BoolVar(showTeam, "authors", false, "alias untuk --team")
+	fs.BoolVar(showTeam, "about", false, "alias untuk --team")
+	showVersion := fs.Bool("version", false, "tampilkan versi aplikasi")
+	fs.BoolVar(showVersion, "v", false, "alias untuk --version")
+
 	mode := fs.String("mode", envOr("MODE", ""), "mode operasional: master|node")
 	httpPort := fs.Int("http-port", envOrInt("HTTP_PORT", 8080), "port HTTP server (master)")
 	grpcPort := fs.Int("grpc-port", envOrInt("GRPC_PORT", 9000), "port gRPC server")
 	nodeID := fs.String("node-id", envOr("NODE_ID", "auto"), "identitas unik node (default 'auto': dialokasikan otomatis oleh master)")
-	masterAddr := fs.String("master", envOr("MASTER_ADDR", ""), "alamat gRPC master (host:port)")
-	advertise := fs.String("advertise", envOr("ADVERTISE_ADDR", ""), "alamat gRPC node yang dapat dijangkau master")
+	masterAddr := fs.String("master", envOrFallback("MASTER", "MASTER_ADDR", ""), "alamat gRPC master (host:port)")
+	advertise := fs.String("advertise", envOrFallback("ADVERTISE", "ADVERTISE_ADDR", ""), "alamat gRPC node yang dapat dijangkau master")
 	token := fs.String("token", envOr("TOKEN", "demo123"), "shared secret autentikasi cluster (default 'demo123')")
 	workers := fs.Int("workers", envOrInt("WORKERS", 0), "jumlah worker goroutine (0 = otomatis)")
 	dataDir := fs.String("data-dir", envOr("DATA_DIR", "./data"), "direktori penyimpanan berkas sementara")
@@ -256,6 +309,15 @@ func Parse() Config {
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "config: gagal memproses argumen:", err)
 		os.Exit(1)
+	}
+
+	if *showTeam {
+		PrintTeam(os.Stdout)
+		os.Exit(0)
+	}
+	if *showVersion {
+		PrintVersion(os.Stdout)
+		os.Exit(0)
 	}
 
 	var errs []string
@@ -362,6 +424,16 @@ func envOr(key, def string) string {
 	return def
 }
 
+func envOrFallback(primary, secondary, def string) string {
+	if v := os.Getenv("DISTAPI_" + primary); v != "" {
+		return v
+	}
+	if v := os.Getenv("DISTAPI_" + secondary); v != "" {
+		return v
+	}
+	return def
+}
+
 func envOrBool(key string, def bool) bool {
 	if v := os.Getenv("DISTAPI_" + key); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
@@ -438,7 +510,6 @@ func DetectLocalIP() string {
 func autoDetectIP(port int) string {
 	return fmt.Sprintf("%s:%d", DetectLocalIP(), port)
 }
-
 
 func parseLogLevel(s string) slog.Level {
 	switch strings.ToLower(s) {

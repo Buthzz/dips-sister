@@ -67,10 +67,12 @@ make build          # Alternatif via Makefile
 # (atau di Linux: ./dist/distapi --mode=node --master=192.168.1.10:9000 --token=demo123 --tui)
 ```
 
-> **Tingkatan Bantuan CLI:**
+> **Tingkatan Bantuan & Perintah CLI:**
 > * `.\distapi.exe` : Menampilkan contoh penggunaan cepat ringkas.
 > * `.\distapi.exe -h` : Menampilkan parameter inti dan sintaks dasar.
 > * `.\distapi.exe --help` : Menampilkan dokumentasi lengkap, parameter failure detector, panduan curl, dan troubleshooting.
+> * `.\distapi.exe team` : Menampilkan daftar nama tim pengembang (alias: `authors`, `about`, `credits`).
+> * `.\distapi.exe --version` : Menampilkan versi aplikasi (`distapi v0.1.0`).
 
 Buka `http://<IP-master>:8080` pada browser untuk menggunakan antarmuka web, atau pantau langsung status kluster melalui antarmuka Terminal TUI.
 
