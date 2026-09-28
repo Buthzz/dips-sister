@@ -4,8 +4,20 @@ option go_package = "distapi/gen/cluster";
 
 // Runs on MASTER, called by NODE
 service Coordinator {
-  rpc Register(RegisterRequest)   returns (RegisterResponse);
-  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc Register(RegisterRequest)       returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest)     returns (HeartbeatResponse);
+  rpc Deregister(DeregisterRequest)   returns (DeregisterResponse);
+}
+
+message DeregisterRequest {
+  string node_id    = 1;
+  string session_id = 2;
+  string reason     = 3; // alasan keluar: "shutdown", "user", dll
+}
+
+message DeregisterResponse {
+  bool   accepted = 1;
+  string message  = 2;
 }
 
 // Runs on every NODE (and master's local worker), called by MASTER

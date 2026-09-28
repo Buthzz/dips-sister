@@ -333,3 +333,24 @@ func TestContentTypeJSON(t *testing.T) {
 		})
 	}
 }
+
+// TestListEvents memastikan GET /api/v1/events mengembalikan array event JSON.
+func TestListEvents(t *testing.T) {
+	h := buatHandler(t)
+	req := httptest.NewRequest("GET", "/api/v1/events", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code salah: dapat %d, mau %d", rec.Code, http.StatusOK)
+	}
+
+	var events []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&events); err != nil {
+		t.Fatalf("decode json gagal: %v", err)
+	}
+	if events == nil {
+		t.Errorf("events tidak boleh nil")
+	}
+}
+

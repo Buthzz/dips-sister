@@ -74,6 +74,12 @@ type NodeClient interface {
 	ProcessImage(ctx context.Context, nodeID string, task *Task, imageData []byte, opts ProcessOptions) ([]byte, error)
 }
 
+// EventLogger mencatat event operasional scheduler untuk observabilitas kluster.
+type EventLogger interface {
+	Info(msg string)
+	Warn(msg string)
+}
+
 // Scheduler mengorkestrasi pembuatan job, distribusi task, dan penanganan kegagalan.
 type Scheduler struct {
 	mu         sync.RWMutex
@@ -84,6 +90,7 @@ type Scheduler struct {
 	maxRetries int
 	taskTmt    time.Duration
 	log        *slog.Logger
+	evLog      EventLogger
 	rrCounter  atomic.Uint64
 }
 
@@ -105,6 +112,13 @@ func New(
 		taskTmt:    taskTimeout,
 		log:        log,
 	}
+}
+
+// SetEventLog menyetel logger event kluster untuk observabilitas live stream.
+func (s *Scheduler) SetEventLog(el EventLogger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.evLog = el
 }
 
 // Submit membuat job baru dan memulai pemrosesan secara asinkron.
@@ -308,11 +322,20 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 		}
 		if task.Retries >= s.maxRetries {
 			task.Status = TaskFailed
-			task.ErrMsg = "maksimum percobaan tercapai"
+			if task.ErrMsg == "" {
+				task.ErrMsg = fmt.Sprintf("maksimum %d percobaan tercapai", s.maxRetries)
+			}
 			s.mu.Unlock()
 			s.log.Error("task gagal permanen",
 				slog.String("task_id", task.ID),
-				slog.Int("retries", task.Retries))
+				slog.Int("retries", task.Retries),
+				slog.String("error", task.ErrMsg))
+			s.mu.RLock()
+			el := s.evLog
+			s.mu.RUnlock()
+			if el != nil {
+				el.Warn(fmt.Sprintf("task %s gagal permanen: %s", task.Filename, task.ErrMsg))
+			}
 			return
 		}
 		s.mu.Unlock()
@@ -324,6 +347,13 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 				slog.String("task_id", task.ID))
 		}
 
+		s.mu.RLock()
+		el := s.evLog
+		s.mu.RUnlock()
+		if el != nil {
+			el.Info(fmt.Sprintf("task %s ditugaskan ke %s", task.Filename, node.NodeID))
+		}
+
 		imageData, err := s.store.ReadUpload(job.ID, task.Filename)
 		if err != nil {
 			s.log.Error("baca upload gagal",
@@ -331,6 +361,7 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 				slog.String("error", err.Error()))
 			s.mu.Lock()
 			task.Retries++
+			task.ErrMsg = fmt.Sprintf("Gagal membaca upload: %v", err)
 			s.mu.Unlock()
 			continue
 		}
@@ -353,8 +384,17 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 			s.mu.Lock()
 			task.Status = TaskPending
 			task.Retries++
+			nodeAddr := node.AdvertiseAddr
+			if nodeAddr == "" {
+				nodeAddr = "local"
+			}
+			task.ErrMsg = fmt.Sprintf("Gagal di %s (%s): %v", node.NodeID, nodeAddr, err)
 			task.AssignedTo = ""
 			s.mu.Unlock()
+			if el != nil {
+				el.Warn(fmt.Sprintf("task %s gagal di %s: %s (mencoba ulang %d/%d)",
+					task.Filename, node.NodeID, err.Error(), task.Retries, s.maxRetries))
+			}
 			continue
 		}
 
@@ -366,6 +406,7 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 				s.mu.Lock()
 				task.Retries++
 				task.Status = TaskPending
+				task.ErrMsg = fmt.Sprintf("Gagal menyimpan hasil: %v", err)
 				s.mu.Unlock()
 				continue
 			}
@@ -374,6 +415,7 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 		var durMs int64
 		s.mu.Lock()
 		task.Status = TaskDone
+		task.ErrMsg = ""
 		task.DoneAt = time.Now()
 		task.DurationMs = time.Since(task.StartedAt).Milliseconds()
 		durMs = task.DurationMs
@@ -383,6 +425,9 @@ func (s *Scheduler) jalankanTask(ctx context.Context, job *Job, task *Task) {
 			slog.String("task_id", task.ID),
 			slog.String("node_id", node.NodeID),
 			slog.Int64("duration_ms", durMs))
+		if el != nil {
+			el.Info(fmt.Sprintf("task %s selesai di %s (%d ms)", task.Filename, node.NodeID, durMs))
+		}
 		return
 	}
 }

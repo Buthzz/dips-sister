@@ -82,8 +82,9 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
 	coordSrv := rpcpkg.NewCoordinatorServer(reg, log)
 
-	// Event log untuk TUI (tetap dibuat agar bisa dipakai meski TUI nonaktif)
+	// Event log untuk TUI dan Web API live stream
 	evLog := tui.NewEventLog(200)
+	sched.SetEventLog(evLog)
 
 	hook := &hookPendaftaran{
 		CoordinatorServer: coordSrv,
@@ -91,6 +92,7 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 		token:             cfg.Token,
 		log:               log,
 		evLog:             evLog,
+		sched:             sched,
 	}
 	cluster.RegisterCoordinatorServer(grpcSrv, hook)
 	cluster.RegisterWorkerServer(grpcSrv, rpcpkg.NewWorkerServer(log))
@@ -104,10 +106,13 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 		}
 	}()
 
+	apiHandler := api.New(sched, reg, store, cfg.MaxImageMB, cfg.MaxImages, log)
+	apiHandler.SetEventLog(evLog)
+
 	alamatHTTP := fmt.Sprintf(":%d", cfg.HTTPPort)
 	srvHTTP := &http.Server{
 		Addr:              alamatHTTP,
-		Handler:           api.New(sched, reg, store, cfg.MaxImageMB, cfg.MaxImages, log),
+		Handler:           apiHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Info("HTTP server mendengarkan", slog.String("addr", alamatHTTP))
@@ -241,6 +246,27 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 		cancel()
 	} else {
 		<-ctx.Done()
+	}
+
+	// Graceful shutdown: beritahu master bahwa node ini akan mati
+	log.Info("node: mengirim deregister ke master...")
+	deregCtx, deregBatal := context.WithTimeout(context.Background(), 3*time.Second)
+	resp, deregErr := coordClient.Deregister(deregCtx, &cluster.DeregisterRequest{
+		NodeId:    cfg.NodeID,
+		SessionId: sessionID,
+		Reason:    "shutdown",
+	})
+	deregBatal()
+
+	if deregErr != nil {
+		log.Warn("deregister gagal (master mungkin sudah mati)",
+			slog.String("error", deregErr.Error()))
+	} else if resp.GetAccepted() {
+		log.Info("deregister diterima master",
+			slog.String("node_id", cfg.NodeID))
+	} else {
+		log.Warn("deregister ditolak master",
+			slog.String("message", resp.GetMessage()))
 	}
 
 	log.Info("node: menghentikan server...")
@@ -398,6 +424,7 @@ type hookPendaftaran struct {
 	token      string
 	log        *slog.Logger
 	evLog      *tui.EventLog
+	sched      *scheduler.Scheduler
 }
 
 func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterRequest) (*cluster.RegisterResponse, error) {
@@ -432,6 +459,22 @@ func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterReq
 	}()
 
 	return resp, nil
+}
+
+func (h *hookPendaftaran) Deregister(ctx context.Context, req *cluster.DeregisterRequest) (*cluster.DeregisterResponse, error) {
+	resp, err := h.CoordinatorServer.Deregister(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+
+	if resp.GetAccepted() {
+		nodeID := req.GetNodeId()
+		h.evLog.Warn(fmt.Sprintf("node %s keluar (graceful shutdown: %s) — task dijadwalkan ulang",
+			nodeID, req.GetReason()))
+		h.sched.RescheduleDeadNodeTasks([]string{nodeID})
+	}
+
+	return resp, err
 }
 
 func buatSessionID() string {

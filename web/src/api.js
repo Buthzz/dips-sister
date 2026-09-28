@@ -50,6 +50,10 @@ export function probeNode(nodeId) {
   return fetch(`/api/v1/nodes/${encodeURIComponent(nodeId)}/probe`).then((r) => cekResponse(r))
 }
 
+export function fetchEvents() {
+  return fetch('/api/v1/events').then((r) => cekResponse(r))
+}
+
 
 export function resultUrl(jobId, filename) {
   return `/api/v1/jobs/${encodeURIComponent(jobId)}/results/${encodeURIComponent(filename)}`

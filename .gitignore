@@ -1,5 +1,6 @@
 # Hasil kompilasi binary aplikasi
-dist/
+/dist/
+
 
 # Berkas pengujian dan coverage laporan
 *.test
