@@ -21,6 +21,118 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type DeregisterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"` // alasan keluar: "shutdown", "user", dll
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeregisterRequest) Reset() {
+	*x = DeregisterRequest{}
+	mi := &file_proto_cluster_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeregisterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeregisterRequest) ProtoMessage() {}
+
+func (x *DeregisterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cluster_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeregisterRequest.ProtoReflect.Descriptor instead.
+func (*DeregisterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_cluster_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *DeregisterRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *DeregisterRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *DeregisterRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type DeregisterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeregisterResponse) Reset() {
+	*x = DeregisterResponse{}
+	mi := &file_proto_cluster_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeregisterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeregisterResponse) ProtoMessage() {}
+
+func (x *DeregisterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cluster_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeregisterResponse.ProtoReflect.Descriptor instead.
+func (*DeregisterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_cluster_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DeregisterResponse) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
+func (x *DeregisterResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 type RegisterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
@@ -33,7 +145,7 @@ type RegisterRequest struct {
 
 func (x *RegisterRequest) Reset() {
 	*x = RegisterRequest{}
-	mi := &file_proto_cluster_proto_msgTypes[0]
+	mi := &file_proto_cluster_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +157,7 @@ func (x *RegisterRequest) String() string {
 func (*RegisterRequest) ProtoMessage() {}
 
 func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[0]
+	mi := &file_proto_cluster_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +170,7 @@ func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterRequest.ProtoReflect.Descriptor instead.
 func (*RegisterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{0}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RegisterRequest) GetNodeId() string {
@@ -99,7 +211,7 @@ type RegisterResponse struct {
 
 func (x *RegisterResponse) Reset() {
 	*x = RegisterResponse{}
-	mi := &file_proto_cluster_proto_msgTypes[1]
+	mi := &file_proto_cluster_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -111,7 +223,7 @@ func (x *RegisterResponse) String() string {
 func (*RegisterResponse) ProtoMessage() {}
 
 func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[1]
+	mi := &file_proto_cluster_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -124,7 +236,7 @@ func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResponse.ProtoReflect.Descriptor instead.
 func (*RegisterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{1}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RegisterResponse) GetAccepted() bool {
@@ -152,7 +264,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_proto_cluster_proto_msgTypes[2]
+	mi := &file_proto_cluster_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -164,7 +276,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[2]
+	mi := &file_proto_cluster_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -177,7 +289,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{2}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *HeartbeatRequest) GetNodeId() string {
@@ -210,7 +322,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_proto_cluster_proto_msgTypes[3]
+	mi := &file_proto_cluster_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +334,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[3]
+	mi := &file_proto_cluster_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +347,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{3}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HeartbeatResponse) GetOk() bool {
@@ -261,7 +373,7 @@ type ProcessRequest struct {
 
 func (x *ProcessRequest) Reset() {
 	*x = ProcessRequest{}
-	mi := &file_proto_cluster_proto_msgTypes[4]
+	mi := &file_proto_cluster_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -273,7 +385,7 @@ func (x *ProcessRequest) String() string {
 func (*ProcessRequest) ProtoMessage() {}
 
 func (x *ProcessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[4]
+	mi := &file_proto_cluster_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -286,7 +398,7 @@ func (x *ProcessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessRequest.ProtoReflect.Descriptor instead.
 func (*ProcessRequest) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{4}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ProcessRequest) GetTaskId() string {
@@ -359,7 +471,7 @@ type ProcessResponse struct {
 
 func (x *ProcessResponse) Reset() {
 	*x = ProcessResponse{}
-	mi := &file_proto_cluster_proto_msgTypes[5]
+	mi := &file_proto_cluster_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -371,7 +483,7 @@ func (x *ProcessResponse) String() string {
 func (*ProcessResponse) ProtoMessage() {}
 
 func (x *ProcessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cluster_proto_msgTypes[5]
+	mi := &file_proto_cluster_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -384,7 +496,7 @@ func (x *ProcessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessResponse.ProtoReflect.Descriptor instead.
 func (*ProcessResponse) Descriptor() ([]byte, []int) {
-	return file_proto_cluster_proto_rawDescGZIP(), []int{5}
+	return file_proto_cluster_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ProcessResponse) GetTaskId() string {
@@ -433,7 +545,15 @@ var File_proto_cluster_proto protoreflect.FileDescriptor
 
 const file_proto_cluster_proto_rawDesc = "" +
 	"\n" +
-	"\x13proto/cluster.proto\x12\acluster\"\x8c\x01\n" +
+	"\x13proto/cluster.proto\x12\acluster\"c\n" +
+	"\x11DeregisterRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"J\n" +
+	"\x12DeregisterResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x8c\x01\n" +
 	"\x0fRegisterRequest\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
 	"\n" +
@@ -469,10 +589,12 @@ const file_proto_cluster_proto_rawDesc = "" +
 	"\bfilename\x18\x04 \x01(\tR\bfilename\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x12\x1f\n" +
 	"\vduration_ms\x18\x06 \x01(\x03R\n" +
-	"durationMs2\x92\x01\n" +
+	"durationMs2\xd9\x01\n" +
 	"\vCoordinator\x12?\n" +
 	"\bRegister\x12\x18.cluster.RegisterRequest\x1a\x19.cluster.RegisterResponse\x12B\n" +
-	"\tHeartbeat\x12\x19.cluster.HeartbeatRequest\x1a\x1a.cluster.HeartbeatResponse2K\n" +
+	"\tHeartbeat\x12\x19.cluster.HeartbeatRequest\x1a\x1a.cluster.HeartbeatResponse\x12E\n" +
+	"\n" +
+	"Deregister\x12\x1a.cluster.DeregisterRequest\x1a\x1b.cluster.DeregisterResponse2K\n" +
 	"\x06Worker\x12A\n" +
 	"\fProcessImage\x12\x17.cluster.ProcessRequest\x1a\x18.cluster.ProcessResponseB\x15Z\x13distapi/gen/clusterb\x06proto3"
 
@@ -488,24 +610,28 @@ func file_proto_cluster_proto_rawDescGZIP() []byte {
 	return file_proto_cluster_proto_rawDescData
 }
 
-var file_proto_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_cluster_proto_goTypes = []any{
-	(*RegisterRequest)(nil),   // 0: cluster.RegisterRequest
-	(*RegisterResponse)(nil),  // 1: cluster.RegisterResponse
-	(*HeartbeatRequest)(nil),  // 2: cluster.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 3: cluster.HeartbeatResponse
-	(*ProcessRequest)(nil),    // 4: cluster.ProcessRequest
-	(*ProcessResponse)(nil),   // 5: cluster.ProcessResponse
+	(*DeregisterRequest)(nil),  // 0: cluster.DeregisterRequest
+	(*DeregisterResponse)(nil), // 1: cluster.DeregisterResponse
+	(*RegisterRequest)(nil),    // 2: cluster.RegisterRequest
+	(*RegisterResponse)(nil),   // 3: cluster.RegisterResponse
+	(*HeartbeatRequest)(nil),   // 4: cluster.HeartbeatRequest
+	(*HeartbeatResponse)(nil),  // 5: cluster.HeartbeatResponse
+	(*ProcessRequest)(nil),     // 6: cluster.ProcessRequest
+	(*ProcessResponse)(nil),    // 7: cluster.ProcessResponse
 }
 var file_proto_cluster_proto_depIdxs = []int32{
-	0, // 0: cluster.Coordinator.Register:input_type -> cluster.RegisterRequest
-	2, // 1: cluster.Coordinator.Heartbeat:input_type -> cluster.HeartbeatRequest
-	4, // 2: cluster.Worker.ProcessImage:input_type -> cluster.ProcessRequest
-	1, // 3: cluster.Coordinator.Register:output_type -> cluster.RegisterResponse
-	3, // 4: cluster.Coordinator.Heartbeat:output_type -> cluster.HeartbeatResponse
-	5, // 5: cluster.Worker.ProcessImage:output_type -> cluster.ProcessResponse
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
+	2, // 0: cluster.Coordinator.Register:input_type -> cluster.RegisterRequest
+	4, // 1: cluster.Coordinator.Heartbeat:input_type -> cluster.HeartbeatRequest
+	0, // 2: cluster.Coordinator.Deregister:input_type -> cluster.DeregisterRequest
+	6, // 3: cluster.Worker.ProcessImage:input_type -> cluster.ProcessRequest
+	3, // 4: cluster.Coordinator.Register:output_type -> cluster.RegisterResponse
+	5, // 5: cluster.Coordinator.Heartbeat:output_type -> cluster.HeartbeatResponse
+	1, // 6: cluster.Coordinator.Deregister:output_type -> cluster.DeregisterResponse
+	7, // 7: cluster.Worker.ProcessImage:output_type -> cluster.ProcessResponse
+	4, // [4:8] is the sub-list for method output_type
+	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -522,7 +648,7 @@ func file_proto_cluster_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_cluster_proto_rawDesc), len(file_proto_cluster_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

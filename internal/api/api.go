@@ -15,8 +15,21 @@ import (
 	"distapi/internal/registry"
 	"distapi/internal/scheduler"
 	"distapi/internal/storage"
+	"distapi/internal/tui"
 	webui "distapi/web"
 )
+
+// EventProvider menyediakan snapshot riwayat event kluster untuk REST API.
+type EventProvider interface {
+	Snapshot() []tui.LogEntry
+}
+
+// EventEntry merepresentasikan satu baris event untuk respon JSON.
+type EventEntry struct {
+	Time    string `json:"time"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+}
 
 // Handler mengelola routing dan dispatch request HTTP.
 type Handler struct {
@@ -26,6 +39,7 @@ type Handler struct {
 	maxImgMB  int
 	maxImages int
 	log       *slog.Logger
+	evLog     EventProvider
 	mux       *http.ServeMux
 }
 
@@ -50,6 +64,11 @@ func New(
 	return h
 }
 
+// SetEventLog menyetel provider event kluster untuk endpoint /api/v1/events.
+func (h *Handler) SetEventLog(el EventProvider) {
+	h.evLog = el
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
@@ -63,8 +82,8 @@ func (h *Handler) daftarkanRoute() {
 	h.mux.HandleFunc("GET /api/v1/jobs/{id}/results/{file}", h.handleUnduhHasil)
 	h.mux.HandleFunc("GET /api/v1/nodes", h.handleListNode)
 	h.mux.HandleFunc("GET /api/v1/nodes/{id}/probe", h.handleProbeNode)
+	h.mux.HandleFunc("GET /api/v1/events", h.handleListEvents)
 	h.daftarkanFrontend()
-
 }
 
 // daftarkanFrontend menyajikan aset statis Vue yang di-embed ke binary.
@@ -291,6 +310,26 @@ func (h *Handler) handleProbeNode(w http.ResponseWriter, r *http.Request) {
 		"latency_ms": latency,
 	})
 }
+
+// handleListEvents mengembalikan snapshot event log aktivitas kluster terbaru.
+// GET /api/v1/events
+func (h *Handler) handleListEvents(w http.ResponseWriter, _ *http.Request) {
+	if h.evLog == nil {
+		tulisJSON(w, http.StatusOK, []EventEntry{})
+		return
+	}
+	entries := h.evLog.Snapshot()
+	resp := make([]EventEntry, len(entries))
+	for i, e := range entries {
+		resp[i] = EventEntry{
+			Time:    e.Time.Format("15:04:05"),
+			Level:   string(e.Level),
+			Message: e.Message,
+		}
+	}
+	tulisJSON(w, http.StatusOK, resp)
+}
+
 
 
 type ringkasanTask struct {

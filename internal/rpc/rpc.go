@@ -135,6 +135,26 @@ func (s *CoordinatorServer) Heartbeat(_ context.Context, req *cluster.HeartbeatR
 	return &cluster.HeartbeatResponse{Ok: ok}, nil
 }
 
+// Deregister menerima permintaan pelepasan diri dari worker node (graceful shutdown).
+func (s *CoordinatorServer) Deregister(_ context.Context, req *cluster.DeregisterRequest) (*cluster.DeregisterResponse, error) {
+	s.log.Info("RPC Deregister diterima",
+		slog.String("node_id", req.GetNodeId()),
+		slog.String("session", req.GetSessionId()),
+		slog.String("reason", req.GetReason()))
+
+	ok := s.reg.Deregister(req.GetNodeId(), req.GetSessionId())
+	if !ok {
+		return &cluster.DeregisterResponse{
+			Accepted: false,
+			Message:  "node tidak terdaftar atau sesi tidak cocok",
+		}, nil
+	}
+	return &cluster.DeregisterResponse{
+		Accepted: true,
+		Message:  "node berhasil di-deregister",
+	}, nil
+}
+
 // TaskObserver menerima notifikasi event pemrosesan task pada worker.
 type TaskObserver interface {
 	OnTaskStart(taskID, filename string)

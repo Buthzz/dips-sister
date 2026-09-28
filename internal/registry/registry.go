@@ -156,6 +156,28 @@ func (r *Registry) Heartbeat(nodeID, sessionID string, activeTasks int) bool {
 	return true
 }
 
+// Deregister menandai node sebagai dead secara eksplisit (graceful shutdown).
+// Mengembalikan true jika node ditemukan dan session cocok.
+func (r *Registry) Deregister(nodeID, sessionID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	n, ok := r.nodes[nodeID]
+	if !ok {
+		return false
+	}
+	if n.SessionID != sessionID {
+		return false
+	}
+
+	n.Status = StatusDead
+	n.ActiveTasks = 0
+	r.log.Info("node deregister (graceful shutdown)",
+		slog.String("node_id", nodeID),
+		slog.String("session", sessionID))
+	return true
+}
+
 // Resolve mengembalikan alamat jaringan node aktif berdasarkan ID-nya.
 func (r *Registry) Resolve(nodeID string) (string, bool) {
 	r.mu.RLock()

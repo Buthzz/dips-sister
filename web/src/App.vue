@@ -1,12 +1,14 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { fetchHealth, fetchNodes, fetchJobs } from './api.js'
+import { fetchHealth, fetchNodes, fetchJobs, fetchEvents } from './api.js'
 import UploadCard from './components/UploadCard.vue'
 import NodesCard from './components/NodesCard.vue'
 import JobsCard from './components/JobsCard.vue'
+import EventLogCard from './components/EventLogCard.vue'
 
 const nodes = ref([])
 const jobs = ref([])
+const events = ref([])
 const masterOnline = ref(false)
 const origin = window.location.origin
 
@@ -36,12 +38,20 @@ async function pullJobs() {
   }
 }
 
+async function pullEvents() {
+  try {
+    events.value = await fetchEvents()
+  } catch {
+    /* event lama dipertahankan ketika polling gagal sesaat */
+  }
+}
+
 async function refreshAll() {
-  await Promise.allSettled([pullHealth(), pullNodes(), pullJobs()])
+  await Promise.allSettled([pullHealth(), pullNodes(), pullJobs(), pullEvents()])
 }
 
 async function handleJobsChanged() {
-  await Promise.allSettled([pullJobs(), pullNodes()])
+  await Promise.allSettled([pullJobs(), pullNodes(), pullEvents()])
 }
 
 onMounted(() => {
@@ -84,6 +94,8 @@ onUnmounted(() => {
         <JobsCard :jobs="jobs" @delete="handleJobsChanged" />
       </section>
     </main>
+
+    <EventLogCard :events="events" />
   </div>
 </template>
 
