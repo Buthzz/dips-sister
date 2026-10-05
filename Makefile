@@ -1,4 +1,4 @@
-.PHONY: all build build-all build-linux build-windows test vet check proto clean run-master run-web web team
+.PHONY: all build build-all build-linux build-windows test vet check proto clean run-master run-web web team rmi-test
 
 DIST := dist
 CMD  := ./cmd/distapi
@@ -68,3 +68,8 @@ clean:
 # Tampilkan daftar tim pengembang
 team:
 	@go run $(CMD) team
+
+# Uji pemanggilan Remote Method Invocation (contoh: TARGET=127.0.0.1:9050 make rmi-test)
+rmi-test:
+	go run $(CMD) rmi-test $(if $(TARGET),$(TARGET),127.0.0.1:9050)
+

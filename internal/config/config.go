@@ -2,9 +2,13 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"log/slog"
 	"net"
@@ -13,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"distapi/internal/rmi"
 )
 
 // Mode operasi binary: master atau node.
@@ -29,6 +35,10 @@ type Config struct {
 	LogLevel          slog.Level
 	HTTPPort          int
 	GRPCPort          int
+	RMIPort           int
+	Priority          int
+	Peers             string
+	AutoFailover      bool
 	Token             string
 	Workers           int
 	DataDir           string
@@ -90,6 +100,7 @@ func printCoreHelp(w io.Writer) {
 SINTAKS:
   distapi --mode=master [opsi...]
   distapi --mode=node --master=<host:port> [opsi...]
+  distapi rmi-test [host:port]
   distapi team | authors
   distapi -h | --help | --version
 
@@ -112,21 +123,31 @@ PARAMETER INTI:
         Port antarmuka REST API gateway dan Web UI pada master (default 8080)
   --grpc-port int
         Port komunikasi protokol biner gRPC (default 9000)
+  --rmi-port int
+        Port komunikasi Remote Method Invocation (RMI) net/rpc (default 9050)
+  --priority int
+        Prioritas pemilihan koordinator / Bully Algorithm (default 0: otomatis sesuai ID)
+  --peers string
+        Daftar alamat RMI node peer (format host:port dipisahkan koma)
+  --auto-failover
+        Aktifkan deteksi & pemilihan koordinator otomatis jika master mati (default true)
   --log-level string
         Level pencatatan teks: debug | info | warn | error (default "info")
 
-PERINTAH INFORMASI:
-  distapi team        Tampilkan daftar nama tim pengembang (alias: authors, about)
-  distapi --version   Tampilkan versi aplikasi (alias: -v, version)
+PERINTAH INFORMASI & PENGUJIAN:
+  distapi team             Tampilkan daftar nama tim pengembang (alias: authors, about)
+  distapi rmi-test [addr]  Uji koneksi dan pemanggilan remote method invocation (default: 127.0.0.1:9050)
+  distapi --version        Tampilkan versi aplikasi (alias: -v, version)
 
 CONTOH OPERASIONAL (PowerShell):
   * Master Visual TUI : .\dist\distapi.exe --mode=master --tui
   * Worker Visual TUI : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --tui
   * Master Mode CLI   : .\dist\distapi.exe --mode=master
   * Worker Mode CLI   : .\dist\distapi.exe --mode=node --master=192.168.1.10:9000
+  * Uji Layanan RMI   : .\dist\distapi.exe rmi-test 127.0.0.1:9050
 
 DOKUMENTASI LENGKAP:
-  Jalankan 'distapi --help' untuk opsi detektor kegagalan, retensi, pengujian curl, & mitigasi firewall.
+  Jalankan 'distapi --help' untuk opsi sinkronisasi, detektor kegagalan, RMI, & troubleshooting.
 `)
 }
 
@@ -149,6 +170,8 @@ SINTAKS:
 SUB-PERINTAH & INFORMASI:
   team, authors, about
         Tampilkan daftar nama anggota tim pengembang
+  rmi-test [target]
+        Uji koneksi dan remote method invocation ke node target (default: 127.0.0.1:9050)
   version, --version, -v
         Tampilkan nomor versi rilis aplikasi
 
@@ -161,6 +184,18 @@ PARAMETER UTAMA:
   --master string
         Alamat gRPC master tujuan (format host:port, contoh: 192.168.1.10:9000)
         [WAJIB pada mode node]
+
+OPSI SINKRONISASI & REMOTE METHOD INVOCATION (RMI):
+  --rmi-port int
+        Port komunikasi Remote Method Invocation (RMI) net/rpc (default 9050)
+  --priority int
+        Nilai prioritas pemilihan koordinator pada Algoritma Bully
+        (default 0: otomatis diekstrak dari angka ID node)
+  --peers string
+        Daftar alamat endpoint RMI peer node lain (dipisahkan koma, contoh: 192.168.1.11:9050,192.168.1.12:9050)
+  --auto-failover
+        Aktifkan deteksi kegagalan koordinator dan inisiasi pemilihan koordinator baru
+        secara otomatis saat master tidak merespons (default true)
 
 OPSI TAMPILAN & LOGGING:
   --tui
@@ -257,6 +292,13 @@ func Parse() Config {
 		case "version":
 			PrintVersion(os.Stdout)
 			os.Exit(0)
+		case "rmi-test", "test-rmi":
+			target := "127.0.0.1:9050"
+			if len(os.Args) > 2 {
+				target = os.Args[2]
+			}
+			RunRMITest(target)
+			os.Exit(0)
 		case "help":
 			printFullHelp(os.Stdout)
 			os.Exit(0)
@@ -290,6 +332,10 @@ func Parse() Config {
 	mode := fs.String("mode", envOr("MODE", ""), "mode operasional: master|node")
 	httpPort := fs.Int("http-port", envOrInt("HTTP_PORT", 8080), "port HTTP server (master)")
 	grpcPort := fs.Int("grpc-port", envOrInt("GRPC_PORT", 9000), "port gRPC server")
+	rmiPort := fs.Int("rmi-port", envOrInt("RMI_PORT", 9050), "port Remote Method Invocation (RMI) net/rpc server")
+	priority := fs.Int("priority", envOrInt("PRIORITY", 0), "prioritas pemilihan koordinator (0 = otomatis sesuai ID node)")
+	peers := fs.String("peers", envOr("PEERS", ""), "daftar alamat RMI peer node lain (dipisahkan koma)")
+	autoFailover := fs.Bool("auto-failover", envOrBool("AUTO_FAILOVER", true), "aktifkan deteksi dan pemilihan koordinator otomatis jika koordinator mati")
 	nodeID := fs.String("node-id", envOr("NODE_ID", "auto"), "identitas unik node (default 'auto': dialokasikan otomatis oleh master)")
 	masterAddr := fs.String("master", envOrFallback("MASTER", "MASTER_ADDR", ""), "alamat gRPC master (host:port)")
 	advertise := fs.String("advertise", envOrFallback("ADVERTISE", "ADVERTISE_ADDR", ""), "alamat gRPC node yang dapat dijangkau master")
@@ -392,6 +438,10 @@ func Parse() Config {
 		LogLevel:          level,
 		HTTPPort:          *httpPort,
 		GRPCPort:          *grpcPort,
+		RMIPort:           *rmiPort,
+		Priority:          *priority,
+		Peers:             *peers,
+		AutoFailover:      *autoFailover,
 		NodeID:            *nodeID,
 		MasterAddr:        *masterAddr,
 		AdvertiseAddr:     adv,
@@ -529,4 +579,65 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// RunRMITest menguji fungsionalitas remote method invocation (RMI) pada node target.
+func RunRMITest(target string) {
+	fmt.Printf("Menguji koneksi Remote Method Invocation (RMI) ke %s...\n\n", target)
+
+	// 1. Uji Ping RMI
+	start := time.Now()
+	pingReply, err := rmi.Ping(target, "distapi-tester", 3*time.Second)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[GAGAL] Tidak dapat menghubungi RMI server di %s: %v\n", target, err)
+		fmt.Fprintf(os.Stderr, "Pastikan distapi berjalan dan port RMI terbuka (default 9050).\n")
+		os.Exit(1)
+	}
+	rtt := time.Since(start)
+	serverTime := time.UnixMilli(pingReply.Timestamp)
+	fmt.Printf("[OK] RMI Ping Berhasil!\n")
+	fmt.Printf("     Node ID       : %s\n", pingReply.NodeID)
+	fmt.Printf("     Peran Node    : %s\n", pingReply.Role)
+	fmt.Printf("     Status        : %s\n", pingReply.Status)
+	fmt.Printf("     Task Aktif    : %d\n", pingReply.ActiveTasks)
+	fmt.Printf("     Waktu Server  : %s (RTT: %v)\n\n", serverTime.Format(time.RFC3339), rtt)
+
+	// 2. Buat citra uji coba 16x16 PNG sintetis
+	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x * 15), G: uint8(y * 15), B: 180, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Gagal membuat citra pengujian: %v\n", err)
+		return
+	}
+
+	// 3. Uji Remote Method Invocation untuk Transformasi Citra
+	fmt.Printf("Menguji pemanggilan metode remote ImageProcessor.TransformImage...\n")
+	t0 := time.Now()
+	procReply, err := rmi.InvokeProcessImage(target, rmi.ProcessImageArgs{
+		TaskID:       "test-task-rmi-001",
+		JobID:        "job-rmi-test",
+		Filename:     "test_sample.png",
+		ImageData:    buf.Bytes(),
+		ResizeWidth:  8,
+		ResizeHeight: 8,
+		Grayscale:    true,
+	}, 5*time.Second)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[GAGAL] Pemanggilan RMI ImageProcessor.TransformImage gagal: %v\n", err)
+		os.Exit(1)
+	}
+	dur := time.Since(t0)
+
+	fmt.Printf("[OK] Transformasi Citra RMI Berhasil!\n")
+	fmt.Printf("     Task ID       : %s\n", procReply.TaskID)
+	fmt.Printf("     Status Sukses : %t\n", procReply.Success)
+	fmt.Printf("     Ukuran Awal   : %d bytes\n", len(buf.Bytes()))
+	fmt.Printf("     Ukuran Hasil  : %d bytes\n", len(procReply.ResultData))
+	fmt.Printf("     Durasi Komputasi : %d ms (Total RTT: %v)\n\n", procReply.DurationMs, dur)
+	fmt.Printf("Pengujian RMI selesai dengan sukses. Protokol sinkronisasi & komputasi terdistribusi aktif.\n")
 }

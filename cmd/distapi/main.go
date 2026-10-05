@@ -7,23 +7,29 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"distapi/gen/cluster"
 	"distapi/internal/api"
 	"distapi/internal/config"
+	"distapi/internal/election"
 	"distapi/internal/registry"
+	"distapi/internal/rmi"
 	rpcpkg "distapi/internal/rpc"
 	"distapi/internal/scheduler"
 	"distapi/internal/storage"
 	"distapi/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -79,15 +85,50 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 
 	sched := scheduler.New(reg, store, nodeClient, cfg.MaxRetries, cfg.TaskTimeout, log)
 
-	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
-	coordSrv := rpcpkg.NewCoordinatorServer(reg, log)
+	masterIP := config.DetectLocalIP()
+	masterPriority := cfg.Priority
+	if masterPriority <= 0 {
+		masterPriority = 100 // Master selalu memiliki prioritas tertinggi secara default
+	}
+	masterRMIAddr := fmt.Sprintf("%s:%d", masterIP, cfg.RMIPort)
+	masterGRPCAddr := fmt.Sprintf("%s:%d", masterIP, cfg.GRPCPort)
+	masterHTTPAddr := fmt.Sprintf("%s:%d", masterIP, cfg.HTTPPort)
+
+	electionEngine := election.NewEngine(election.Config{
+		NodeID:             "master",
+		GRPCAddr:           masterGRPCAddr,
+		RMIAddr:            masterRMIAddr,
+		HTTPAddr:           masterHTTPAddr,
+		Priority:           masterPriority,
+		IsInitialLeader:    true,
+		AutoFailover:       false,
+		HeartbeatInterval:  cfg.HeartbeatInterval,
+		CoordinatorTimeout: cfg.NodeTimeout,
+	}, log)
+
+	parseAndRegisterPeers(electionEngine, cfg.Peers)
 
 	// Event log untuk TUI (tetap dibuat agar bisa dipakai meski TUI nonaktif)
 	evLog := tui.NewEventLog(200)
 
+	// Mulai RMI Server Master (net/rpc)
+	rmiCoordSrv := rmi.NewCoordinatorService("master", "master", electionEngine, log)
+	rmiImgSrv := rmi.NewImageProcessorService("master", log)
+	rmiSrv := rmi.NewServer(cfg.RMIPort, rmiCoordSrv, rmiImgSrv, log)
+	go func() {
+		if err := rmiSrv.Start(ctx); err != nil {
+			log.Error("RMI server master error", slog.String("error", err.Error()))
+		}
+	}()
+
+	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
+	coordSrv := rpcpkg.NewCoordinatorServer(reg, log)
+
 	hook := &hookPendaftaran{
 		CoordinatorServer: coordSrv,
 		nodeClient:        nodeClient,
+		electionEngine:    electionEngine,
+		rmiPort:           cfg.RMIPort,
 		token:             cfg.Token,
 		log:               log,
 		evLog:             evLog,
@@ -117,8 +158,7 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 		}
 	}()
 
-	masterIP := config.DetectLocalIP()
-	evLog.Info(fmt.Sprintf("master aktif di %s:%d (HTTP :%d)", masterIP, cfg.GRPCPort, cfg.HTTPPort))
+	evLog.Info(fmt.Sprintf("master aktif di %s:%d (HTTP :%d, RMI :%d)", masterIP, cfg.GRPCPort, cfg.HTTPPort, cfg.RMIPort))
 	evLog.Info(fmt.Sprintf("perintah worker: .\\dist\\distapi.exe --mode=node --master=%s:%d --token=%s --tui",
 		masterIP, cfg.GRPCPort, cfg.Token))
 
@@ -126,10 +166,13 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 		fmt.Printf("\n[distapi Master Aktif]\n"+
 			"  IP Master Terdeteksi : %s\n"+
 			"  Web UI / REST API    : http://%s:%d (atau http://localhost:%d)\n"+
-			"  gRPC Cluster Port    : %s:%d\n\n"+
+			"  gRPC Cluster Port    : %s:%d\n"+
+			"  RMI net/rpc Port     : %s:%d\n\n"+
 			"Perintah yang dapat disalin untuk laptop Node Worker:\n"+
-			"  .\\dist\\distapi.exe --mode=node --master=%s:%d --token=%s --tui\n\n",
-			masterIP, masterIP, cfg.HTTPPort, cfg.HTTPPort, masterIP, cfg.GRPCPort, masterIP, cfg.GRPCPort, cfg.Token)
+			"  .\\dist\\distapi.exe --mode=node --master=%s:%d --token=%s --tui\n\n"+
+			"Perintah pengujian RMI:\n"+
+			"  .\\dist\\distapi.exe rmi-test %s:%d\n\n",
+			masterIP, masterIP, cfg.HTTPPort, cfg.HTTPPort, masterIP, cfg.GRPCPort, masterIP, cfg.RMIPort, masterIP, cfg.GRPCPort, cfg.Token, masterIP, cfg.RMIPort)
 	}
 
 	if cfg.TUI {
@@ -147,6 +190,7 @@ func jalankanMaster(parentCtx context.Context, cfg config.Config, log *slog.Logg
 	shutCtx, batal := context.WithTimeout(context.Background(), 10*time.Second)
 	defer batal()
 	_ = srvHTTP.Shutdown(shutCtx)
+	_ = rmiSrv.Close()
 	log.Info("master: shutdown selesai")
 }
 
@@ -166,23 +210,93 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 	if nodeIDTeks == "auto" || nodeIDTeks == "" {
 		nodeIDTeks = "auto (menunggu alokasi dari master...)"
 	}
+
+	// Alokasi RMI port otomatis untuk pengetesan multi-instance di localhost jika default
+	if cfg.RMIPort == 9050 && cfg.GRPCPort != 9000 {
+		cfg.RMIPort = cfg.GRPCPort + 50
+	}
+
+	nodePriority := cfg.Priority
+	if nodePriority <= 0 {
+		nodePriority = election.ParsePriority(cfg.NodeID, 0)
+	}
+
+	masterHost, _, err := net.SplitHostPort(cfg.MasterAddr)
+	if err != nil {
+		masterHost = "127.0.0.1"
+	}
+	masterRMIAddr := fmt.Sprintf("%s:%d", masterHost, 9050)
+	nodeRMIAddr := fmt.Sprintf("%s:%d", nodeIP, cfg.RMIPort)
+
 	if !cfg.TUI {
 		fmt.Printf("\n[distapi Node Worker Aktif]\n"+
 			"  Node ID              : %s\n"+
 			"  IP Node Terdeteksi   : %s\n"+
 			"  Advertise ke Master  : %s\n"+
-			"  Master Tujuan        : %s\n\n",
-			nodeIDTeks, nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr)
+			"  Master Tujuan        : %s\n"+
+			"  RMI net/rpc Port     : %d\n"+
+			"  Prioritas Pemilihan  : %d (Bully Algorithm)\n\n",
+			nodeIDTeks, nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr, cfg.RMIPort, nodePriority)
 	}
 
 	evLog := tui.NewEventLog(100)
-	evLog.Info(fmt.Sprintf("node aktif di IP %s (advertise: %s, master: %s)", nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr))
+	evLog.Info(fmt.Sprintf("node aktif di IP %s (advertise: %s, master: %s, rmi: :%d)",
+		nodeIP, cfg.AdvertiseAddr, cfg.MasterAddr, cfg.RMIPort))
 	state := tui.NewNodeState(cfg.NodeID, sessionID, cfg.MasterAddr, cfg.AdvertiseAddr)
 
+	// Inisialisasi engine pemilihan Bully & topologi kluster
+	electionEngine := election.NewEngine(election.Config{
+		NodeID:             cfg.NodeID,
+		GRPCAddr:           cfg.AdvertiseAddr,
+		RMIAddr:            nodeRMIAddr,
+		HTTPAddr:           fmt.Sprintf("%s:%d", nodeIP, cfg.HTTPPort),
+		Priority:           nodePriority,
+		IsInitialLeader:    false,
+		AutoFailover:       cfg.AutoFailover,
+		HeartbeatInterval:  cfg.HeartbeatInterval,
+		CoordinatorTimeout: cfg.NodeTimeout,
+		InitialCoordinator: rmi.Peer{
+			NodeID:   "master",
+			GRPCAddr: cfg.MasterAddr,
+			RMIAddr:  masterRMIAddr,
+			Priority: 100,
+		},
+	}, log)
+
+	parseAndRegisterPeers(electionEngine, cfg.Peers)
+
+	// Mulai RMI Server Node
+	rmiCoordSrv := rmi.NewCoordinatorService(cfg.NodeID, "node", electionEngine, log)
+	rmiImgSrv := rmi.NewImageProcessorService(cfg.NodeID, log)
+	rmiSrv := rmi.NewServer(cfg.RMIPort, rmiCoordSrv, rmiImgSrv, log)
+	go func() {
+		if err := rmiSrv.Start(ctx); err != nil {
+			log.Error("node RMI error", slog.String("error", err.Error()))
+		}
+	}()
+
+	// Siapkan gRPC server (melayani worker dan koordinator cadangan untuk failover)
 	grpcSrv := rpcpkg.NewGRPCServer(cfg.Token)
 	workerSrv := rpcpkg.NewWorkerServer(log)
 	workerSrv.SetObserver(state)
 	cluster.RegisterWorkerServer(grpcSrv, workerSrv)
+
+	nodeReg := registry.New(cfg.NodeTimeout, log)
+	nodeCoordSrv := rpcpkg.NewCoordinatorServer(nodeReg, log)
+	nodeClient := rpcpkg.NewNodeClientAdapter(cfg.Token)
+	defer nodeClient.Close()
+
+	hook := &hookPendaftaran{
+		CoordinatorServer: nodeCoordSrv,
+		nodeClient:        nodeClient,
+		electionEngine:    electionEngine,
+		rmiPort:           cfg.RMIPort,
+		token:             cfg.Token,
+		log:               log,
+		evLog:             evLog,
+	}
+	cluster.RegisterCoordinatorServer(grpcSrv, hook)
+
 	go func() {
 		if err := rpcpkg.ServeGRPC(ctx, grpcSrv, cfg.GRPCPort, log); err != nil {
 			log.Error("node gRPC error", slog.String("error", err.Error()))
@@ -200,9 +314,11 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 			"  - Pastikan port 9000 TCP diizinkan di Windows Firewall.\n\n", cfg.MasterAddr)
 		os.Exit(1)
 	}
-	defer conn.Close()
 
+	holder := &coordClientHolder{}
 	coordClient := cluster.NewCoordinatorClient(conn)
+	holder.set(cfg.MasterAddr, coordClient, conn)
+	defer holder.close()
 
 	assignedID, err := registerDenganRetry(ctx, coordClient, cfg, sessionID, log)
 	if err != nil {
@@ -220,6 +336,11 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 	cfg.NodeID = assignedID
 	state.SetNodeID(assignedID)
 	state.RecordHeartbeatSuccess()
+
+	// Perbarui identitas pada engine pemilihan dan RMI services
+	electionEngine.UpdateSelf(assignedID, cfg.AdvertiseAddr, nodeRMIAddr, fmt.Sprintf("%s:%d", nodeIP, cfg.HTTPPort))
+	rmiCoordSrv.SetNodeID(assignedID)
+	rmiImgSrv.SetNodeID(assignedID)
 	evLog.Info("terdaftar ke master sebagai " + assignedID)
 
 	if !cfg.TUI {
@@ -230,7 +351,83 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 			assignedID, cfg.AdvertiseAddr, cfg.MasterAddr)
 	}
 
-	go loopHeartbeat(ctx, coordClient, cfg, sessionID, log, state, evLog)
+	// Daftarkan callback pemilihan koordinator (Bully Algorithm & Failover)
+	electionEngine.SetCallbacks(
+		func(newLeader rmi.Peer) {
+			// onPromoted: Node ini memenangkan pemilihan dan menjadi koordinator baru!
+			evLog.Warn(fmt.Sprintf("FAILOVER: Node %s memenangkan pemilihan koordinator (Bully Algorithm)!", newLeader.NodeID))
+			log.Warn("Node dipromosikan menjadi koordinator baru kluster",
+				slog.String("node_id", newLeader.NodeID),
+				slog.Int("priority", newLeader.Priority))
+
+			rmiCoordSrv.SetRole("master")
+
+			store, err := storage.New(cfg.DataDir)
+			if err == nil {
+				_ = store.Init()
+			}
+			sched := scheduler.New(nodeReg, store, nodeClient, cfg.MaxRetries, cfg.TaskTimeout, log)
+
+			go monitorNodeMati(ctx, nodeReg, sched, log, evLog)
+			go pembersihJobTTL(ctx, sched, store, cfg.JobTTL, log)
+
+			alamatHTTP := fmt.Sprintf(":%d", cfg.HTTPPort)
+			srvHTTP := &http.Server{
+				Addr:              alamatHTTP,
+				Handler:           api.New(sched, nodeReg, store, cfg.MaxImageMB, cfg.MaxImages, log),
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			log.Info("HTTP server failover koordinator mendengarkan", slog.String("addr", alamatHTTP))
+			go func() {
+				if err := srvHTTP.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					log.Error("HTTP failover server error", slog.String("error", err.Error()))
+				}
+			}()
+
+			evLog.Info(fmt.Sprintf("REST API aktif di port %d pada koordinator baru", cfg.HTTPPort))
+		},
+		func(newLeader rmi.Peer) {
+			// onCoordinatorChanged: Koordinator baru terpilih di node lain!
+			evLog.Warn(fmt.Sprintf("FAILOVER: Koordinator baru diakui: %s di %s", newLeader.NodeID, newLeader.GRPCAddr))
+			log.Warn("Koordinator kluster berganti",
+				slog.String("coordinator_id", newLeader.NodeID),
+				slog.String("grpc_addr", newLeader.GRPCAddr),
+				slog.String("rmi_addr", newLeader.RMIAddr))
+
+			go func() {
+				time.Sleep(1 * time.Second)
+				newConn, err := rpcpkg.DialNode(newLeader.GRPCAddr, cfg.Token)
+				if err != nil {
+					log.Error("gagal menghubungkan ke koordinator baru", slog.String("error", err.Error()))
+					return
+				}
+				newClient := cluster.NewCoordinatorClient(newConn)
+				holder.set(newLeader.GRPCAddr, newClient, newConn)
+
+				newID, err := registerDenganRetry(ctx, newClient, cfg, sessionID, log)
+				if err == nil {
+					cfg.NodeID = newID
+					state.SetNodeID(newID)
+					state.RecordHeartbeatSuccess()
+					evLog.Info("terdaftar ke koordinator baru sebagai " + newID)
+				}
+			}()
+		},
+		func(level slog.Level, msg string) {
+			switch level {
+			case slog.LevelWarn, slog.LevelError:
+				evLog.Warn(msg)
+			default:
+				evLog.Info(msg)
+			}
+		},
+	)
+
+	if cfg.AutoFailover {
+		go electionEngine.StartMonitor(ctx)
+	}
+
+	go loopHeartbeat(ctx, holder, electionEngine, cfg, sessionID, log, state, evLog)
 
 	if cfg.TUI {
 		model := tui.NewNodeModel(state, evLog)
@@ -245,6 +442,7 @@ func jalankanNode(parentCtx context.Context, cfg config.Config, log *slog.Logger
 
 	log.Info("node: menghentikan server...")
 	grpcSrv.GracefulStop()
+	_ = rmiSrv.Close()
 	log.Info("node: shutdown selesai")
 }
 
@@ -303,7 +501,8 @@ func registerDenganRetry(
 
 func loopHeartbeat(
 	ctx context.Context,
-	client cluster.CoordinatorClient,
+	holder *coordClientHolder,
+	engine *election.Engine,
 	cfg config.Config,
 	sessionID string,
 	log *slog.Logger,
@@ -318,9 +517,19 @@ func loopHeartbeat(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if engine != nil && engine.IsLeader() {
+				// Node ini telah dipromosikan menjadi koordinator, tidak perlu heartbeat ke master lama
+				continue
+			}
+
+			client := holder.get()
+			if client == nil {
+				continue
+			}
+
 			hCtx, batal := context.WithTimeout(ctx, 3*time.Second)
 			resp, err := client.Heartbeat(hCtx, &cluster.HeartbeatRequest{
-				NodeId:      cfg.NodeID,
+				NodeId:      state.Snapshot().NodeID,
 				SessionId:   sessionID,
 				ActiveTasks: int32(state.ActiveTaskCount()),
 			})
@@ -366,7 +575,6 @@ func monitorNodeMati(ctx context.Context, reg *registry.Registry, sched *schedul
 	}
 }
 
-
 func pembersihJobTTL(ctx context.Context, sched *scheduler.Scheduler, store *storage.Store, ttl time.Duration, log *slog.Logger) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -394,10 +602,12 @@ func pembersihJobTTL(ctx context.Context, sched *scheduler.Scheduler, store *sto
 
 type hookPendaftaran struct {
 	*rpcpkg.CoordinatorServer
-	nodeClient *rpcpkg.NodeClientAdapter
-	token      string
-	log        *slog.Logger
-	evLog      *tui.EventLog
+	nodeClient     *rpcpkg.NodeClientAdapter
+	electionEngine *election.Engine
+	rmiPort        int
+	token          string
+	log            *slog.Logger
+	evLog          *tui.EventLog
 }
 
 func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterRequest) (*cluster.RegisterResponse, error) {
@@ -414,6 +624,25 @@ func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterReq
 	}
 
 	h.evLog.Info(fmt.Sprintf("node %s bergabung dari %s", actualID, req.GetAdvertiseAddr()))
+
+	// Sinkronkan ke engine pemilihan koordinator (Bully Algorithm & RMI)
+	if h.electionEngine != nil {
+		wHost, _, _ := net.SplitHostPort(req.GetAdvertiseAddr())
+		if wHost == "" {
+			wHost = "127.0.0.1"
+		}
+		wRMIPort := h.rmiPort
+		if wRMIPort <= 0 {
+			wRMIPort = 9050
+		}
+		h.electionEngine.RegisterPeer(rmi.Peer{
+			NodeID:   actualID,
+			GRPCAddr: req.GetAdvertiseAddr(),
+			RMIAddr:  fmt.Sprintf("%s:%d", wHost, wRMIPort),
+			Priority: election.ParsePriority(actualID, 0),
+			LastSeen: time.Now().Unix(),
+		})
+	}
 
 	go func() {
 		conn, dialErr := rpcpkg.DialNode(req.GetAdvertiseAddr(), h.token)
@@ -434,8 +663,71 @@ func (h *hookPendaftaran) Register(ctx context.Context, req *cluster.RegisterReq
 	return resp, nil
 }
 
+type coordClientHolder struct {
+	mu     sync.RWMutex
+	client cluster.CoordinatorClient
+	conn   *grpc.ClientConn
+	addr   string
+}
+
+func (h *coordClientHolder) get() cluster.CoordinatorClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.client
+}
+
+func (h *coordClientHolder) set(addr string, client cluster.CoordinatorClient, conn *grpc.ClientConn) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conn != nil && h.conn != conn {
+		_ = h.conn.Close()
+	}
+	h.addr = addr
+	h.client = client
+	h.conn = conn
+}
+
+func (h *coordClientHolder) close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conn != nil {
+		_ = h.conn.Close()
+		h.conn = nil
+		h.client = nil
+	}
+}
+
+func parseAndRegisterPeers(engine *election.Engine, peersStr string) {
+	if engine == nil || peersStr == "" {
+		return
+	}
+	for _, p := range strings.Split(peersStr, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		host, portStr, err := net.SplitHostPort(p)
+		if err != nil {
+			continue
+		}
+		port, _ := strconv.Atoi(portStr)
+		grpcPort := port - 50
+		if grpcPort < 1000 {
+			grpcPort = 9000
+		}
+		engine.RegisterPeer(rmi.Peer{
+			NodeID:   fmt.Sprintf("peer-%s", host),
+			RMIAddr:  p,
+			GRPCAddr: fmt.Sprintf("%s:%d", host, grpcPort),
+			Priority: 10,
+			LastSeen: time.Now().Unix(),
+		})
+	}
+}
+
 func buatSessionID() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
+

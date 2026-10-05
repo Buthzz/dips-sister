@@ -16,25 +16,32 @@
 `distapi` adalah sistem terdistribusi berbasis **Master-Slave** yang dirancang untuk menjalankan pemrosesan citra digital secara paralel pada 4 laptop bersistem operasi **native Windows**. Sistem diimplementasikan dalam bahasa pemrograman Go dan dikompilasi menjadi sebuah file biner mandiri tunggal (`distapi.exe`).
 
 * **Komunikasi Klien:** Protokol HTTP/1.1 RESTful API (`POST /api/v1/jobs` mengembalikan respons `202 Accepted` untuk pemrosesan asinkron).
-* **Komunikasi Antar-Node:** Protokol gRPC di atas HTTP/2 dengan serialisasi biner Protocol Buffers v3 dan proteksi token metadata.
+* **Komunikasi Antar-Node (RPC):** Protokol gRPC di atas HTTP/2 dengan serialisasi biner Protocol Buffers v3 dan proteksi token metadata untuk transmisi gambar berkecepatan tinggi.
+* **Komunikasi Antar-Node (RMI):** Remote Method Invocation berbasis objek Go `net/rpc` (port 9050) untuk sinkronisasi kluster, manajemen topologi peer, dan pemanggilan remote method transformasi citra.
+* **Sinkronisasi & Pemilihan Koordinator:** Algoritma Bully (*Bully Algorithm*, Garcia-Molina 1982) dengan *Dynamic Coordinator Failover* otomatis saat koordinator aktif mati.
 * **Orkestrasi Komputasi:** Pola *Scatter-Gather* dengan dispatch dinamis *Round-Robin* dan penanganan kegagalan otomatis (*Automatic Rescheduling*).
 
 ```mermaid
 flowchart LR
     Client["Klien HTTP\n(Browser / curl.exe)"] -->|":8080 REST API"| Master["Laptop 1: Master Node\n(Orchestrator & Storage)"]
-    Master -->|":9000 gRPC"| N1["Laptop 2: Node-1\n(Worker)"]
-    Master -->|":9000 gRPC"| N2["Laptop 3: Node-2\n(Worker)"]
-    Master -->|":9000 gRPC"| N3["Laptop 4: Node-3\n(Worker)"]
+    Master -->|":9000 gRPC (RPC)"| N1["Laptop 2: Node-1\n(Worker)"]
+    Master -->|":9000 gRPC (RPC)"| N2["Laptop 3: Node-2\n(Worker)"]
+    Master -->|":9000 gRPC (RPC)"| N3["Laptop 4: Node-3\n(Worker)"]
+    N1 <-->|":9050 RMI (Sinkronisasi & Bully)"| N2
+    N2 <-->|":9050 RMI (Sinkronisasi & Bully)"| N3
+    N1 <-->|":9050 RMI (Sinkronisasi & Bully)"| N3
 ```
 
 ## Status Progres Proyek
 
 | Komponen & Fitur | Status Kesiapan | Keterangan Verifikasi |
 | :--- | :---: | :--- |
-| **Konfigurasi 12-Factor (`config`)** | 100% ✅ | Evaluasi CLI Flag > Env > Default, *fail-fast validation*, 7 unit test PASS |
+| **Konfigurasi 12-Factor (`config`)** | 100% ✅ | Evaluasi CLI Flag > Env > Default, *fail-fast validation*, 10 unit test PASS |
 | **Persistensi Atomik (`storage`)** | 100% ✅ | Atomic write via temp file + rename, Windows NTFS lock-retry, 9 unit test PASS |
 | **Home-Based Naming (`registry`)** | 100% ✅ | Pemetaan flat-name, resolusi $O(1)$, sesi dinamis & heartbeat, 9 unit test PASS |
 | **RPC & Interceptor (`rpc`)** | 100% ✅ | Coordinator & Worker service gRPC, auth metadata token, connection pooling |
+| **Remote Method Invocation (`rmi`)** | 100% ✅ | Remote Object `CoordinatorService` & `ImageProcessorService` (`net/rpc`), 5 unit test PASS |
+| **Sinkronisasi & Bully Election (`election`)** | 100% ✅ | Penentuan koordinator & Dynamic Failover otomatis jika master mati, 3 unit test PASS |
 | **Pemroses Citra Murni (`worker`)** | 100% ✅ | Nearest-neighbour aspect resizing & grayscale ITU-R BT.601, 9 unit test PASS |
 | **Scatter-Gather Engine (`scheduler`)** | 100% ✅ | Concurrency via goroutines, retry $\le 3$, first-result-wins, 8 unit test PASS |
 | **RESTful Gateway (`api`)** | 100% ✅ | 8 endpoint standar, multipart parser, JSON error envelope, 10 unit test PASS |
@@ -46,7 +53,7 @@ flowchart LR
 | **Perlindungan Identitas Node** | 100% ✅ | Pencegahan tabrakan node-id duplikat, session hijacking guard, & pemulihan restart |
 | **Pengujian Fisik 4 Laptop (Keputusan D1)** | 100% ✅ | Konektivitas TCP antar-4 laptop terverifikasi pada jaringan fisik |
 
-> **Estimasi Progres Keseluruhan:** **100%** (Seluruh komponen — fondasi backend, engine konkurensi, failure detector, frontend web, terminal UI, dokumentasi akademik, dan pengujian fisik kluster — telah rampung dan terverifikasi).
+> **Estimasi Progres Keseluruhan:** **100%** (Seluruh komponen — RESTful API, RPC gRPC, RMI net/rpc, Algoritma Pemilihan Bully, failure detector, frontend web, terminal UI, dokumentasi akademik, dan pengujian fisik kluster — telah rampung dan terverifikasi).
 
 ## Panduan Cepat Eksekusi
 
@@ -65,12 +72,16 @@ make build          # Alternatif via Makefile
 # 3. Jalankan Laptop 2, 3, 4 (Node Worker) — Node ID otomatis dialokasikan master (node-1, node-2, node-3)
 .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123 --tui
 # (atau di Linux: ./dist/distapi --mode=node --master=192.168.1.10:9000 --token=demo123 --tui)
+
+# 4. Uji Pemanggilan Remote Method Invocation (RMI) ke Master atau Worker:
+.\dist\distapi.exe rmi-test 192.168.1.10:9050
 ```
 
 > **Tingkatan Bantuan & Perintah CLI:**
 > * `.\distapi.exe` : Menampilkan contoh penggunaan cepat ringkas.
 > * `.\distapi.exe -h` : Menampilkan parameter inti dan sintaks dasar.
-> * `.\distapi.exe --help` : Menampilkan dokumentasi lengkap, parameter failure detector, panduan curl, dan troubleshooting.
+> * `.\distapi.exe --help` : Menampilkan dokumentasi lengkap, sinkronisasi, detektor kegagalan, RMI, dan troubleshooting.
+> * `.\distapi.exe rmi-test [addr]` : Menguji koneksi dan eksekusi Remote Method Invocation (RMI) pada remote object node.
 > * `.\distapi.exe team` : Menampilkan daftar nama tim pengembang (alias: `authors`, `about`, `credits`).
 > * `.\distapi.exe --version` : Menampilkan versi aplikasi (`distapi v0.1.0`).
 

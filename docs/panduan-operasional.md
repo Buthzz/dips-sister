@@ -31,10 +31,11 @@
 Jalankan PowerShell **sebagai Administrator** pada laptop agar port komunikasi masuk (*inbound*) tidak diblokir oleh Windows:
 
 ```powershell
-# Di SEMUA Laptop (Laptop 1, 2, 3, 4): Izinkan port komunikasi gRPC
+# Di SEMUA Laptop (Laptop 1, 2, 3, 4): Izinkan port komunikasi gRPC & RMI
 New-NetFirewallRule -DisplayName "distapi gRPC" -Direction Inbound -Protocol TCP -LocalPort 9000 -Action Allow
+New-NetFirewallRule -DisplayName "distapi RMI" -Direction Inbound -Protocol TCP -LocalPort 9050 -Action Allow
 
-# Khusus di Laptop 1 (Master): Izinkan port REST API Gateway & Web UI
+# Khusus di Laptop 1 (Master / Calon Koordinator Baru): Izinkan port REST API Gateway & Web UI
 New-NetFirewallRule -DisplayName "distapi HTTP" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
 ```
 
@@ -174,8 +175,12 @@ Seluruh parameter pada biner `distapi` dapat dikonfigurasi melalui flag baris pe
 | `--tui` | `DISTAPI_TUI` | `false` | **Tampilan Terminal Interaktif:** Mengaktifkan dashboard visual Bubble Tea (rekomendasi utama saat presentasi demo di kelas). |
 | `--node-id` | `DISTAPI_NODE_ID` | `"auto"` | **Identitas Unik Worker:** Mengatur ID node secara manual, atau biarkan `"auto"` agar dialokasikan otomatis oleh Master (`node-1`, `node-2`, dst). |
 | `--advertise` | `DISTAPI_ADVERTISE` / `DISTAPI_ADVERTISE_ADDR` | *Auto-detect IP* | **Alamat Balik Node:** Alamat IP & port yang dilaporkan node ke master agar master tahu ke mana task citra harus dikirim melalui gRPC. |
-| `--http-port` | `DISTAPI_HTTP_PORT` | `8080` | **Port Antarmuka Pengguna:** Port layanan REST API Gateway dan Web UI pada node Master. |
+| `--http-port` | `DISTAPI_HTTP_PORT` | `8080` | **Port Antarmuka Pengguna:** Port layanan REST API Gateway dan Web UI pada node Master / Koordinator aktif. |
 | `--grpc-port` | `DISTAPI_GRPC_PORT` | `9000` | **Port Komunikasi Kluster:** Port saluran komunikasi biner gRPC berkecepatan tinggi antar-node. |
+| `--rmi-port` | `DISTAPI_RMI_PORT` | `9050` | **Port Remote Method Invocation (RMI):** Port server objek terdistribusi `net/rpc` untuk sinkronisasi kluster dan pemilihan koordinator. |
+| `--priority` | `DISTAPI_PRIORITY` | `0` *(Otomatis)* | **Bobot Prioritas Pemilihan:** Nilai bobot prioritas Algoritma Bully (Master = 100, node diekstrak dari angka ID, misal: node-1 = 1, node-2 = 2). |
+| `--peers` | `DISTAPI_PEERS` | `""` | **Daftar Peer Statik:** Alamat RMI peer node lain (dipisahkan koma, contoh: `192.168.1.11:9050,192.168.1.12:9050`). |
+| `--auto-failover`| `DISTAPI_AUTO_FAILOVER` | `true` | **Pemilihan Koordinator Otomatis:** Mengaktifkan deteksi kegagalan koordinator dan inisiasi pemilihan Algoritma Bully jika Master mati. |
 | `--workers` | `DISTAPI_WORKERS` | *Jml Core CPU* | **Derajat Paralelisme Lokal:** Jumlah goroutine paralel yang memproses citra secara simultan di dalam satu mesin worker. |
 | `--heartbeat-interval`| `DISTAPI_HEARTBEAT_INTERVAL` | `2s` | **Frekuensi Detak Jantung:** Interval pengiriman sinyal detak jantung dari worker ke master (implementasi Failure Detector Cristian 1991). |
 | `--node-timeout` | `DISTAPI_NODE_TIMEOUT` | `6s` | **Batas Toleransi Kegagalan Node:** Durasi tanpa detak jantung sebelum master menyatakan worker mati (*dead*) dan mengalihkan task-nya ke worker lain. |
@@ -192,9 +197,10 @@ Seluruh parameter pada biner `distapi` dapat dikonfigurasi melalui flag baris pe
 | Perintah / Subcommand | Alias Alternatif | Kegunaan |
 | :--- | :--- | :--- |
 | `distapi team` | `authors`, `about`, `credits`, `--team` | Menampilkan daftar nama tim pengembang dan NIM tanpa rincian pembagian tugas. |
+| `distapi rmi-test [target]` | `test-rmi` | Menguji konektivitas RMI ping dan pemanggilan method remote `ImageProcessor.TransformImage` ke node target (default `127.0.0.1:9050`). |
 | `distapi --version` | `version`, `-v` | Menampilkan nomor versi aplikasi saat ini (`distapi v0.1.0`). |
 | `distapi -h` | `-help` | Menampilkan ringkasan parameter inti dan sintaks dasar. |
-| `distapi --help` | `help` | Menampilkan dokumentasi lengkap, detektor kegagalan, contoh curl, dan mitigasi firewall. |
+| `distapi --help` | `help` | Menampilkan dokumentasi lengkap, sinkronisasi, detektor kegagalan, RMI, dan mitigasi firewall. |
 
 ---
 
@@ -290,10 +296,22 @@ Gunakan urutan demonstrasi praktis 5 menit ini untuk membuktikan fungsionalitas 
 2. **Scatter-Gather Citra:**
    * Unggah 9–12 gambar sekaligus via antarmuka Web UI.
    * Perhatikan kolom *Assigned To* pada tabel: beban tugas terdistribusi merata ke ketiga laptop worker (*Round-Robin*).
-3. **Simulasi Kegagalan (Pamer Fault Tolerance):**
+3. **Simulasi Kegagalan Worker (Fault Tolerance Task):**
    * Saat proses sedang berjalan, **matikan paksa terminal Laptop 3 (Node 2)** dengan menekan `Ctrl + C`.
    * Perhatikan layar Master: setelah 6 detik, Master mendeteksi detak jantung hilang, status `node-2` berubah menjadi `dead`.
    * Task yang tadinya diemban oleh `node-2` otomatis di-reschedule ke `node-1` atau `node-3`. Seluruh batch job tetap sukses berstatus `DONE`.
+4. **Pengujian Mandiri Remote Method Invocation (RMI):**
+   * Buka terminal di Laptop 2 (Worker) dan jalankan verifikasi RMI ke Master:
+     ```powershell
+     .\distapi.exe rmi-test <IP_MASTER>:9050
+     ```
+   * Tunjukkan kepada dosen: status remote object `Coordinator` dan eksekusi komputasi citra jarak jauh `ImageProcessor.TransformImage` berhasil dieksekusi via protokol RMI.
+5. **Simulasi Pergantian Koordinator Otomatis (Bully Algorithm Coordinator Failover):**
+   * Tunjukkan ketahanan sistem level tinggi terhadap kegagalan koordinator tunggal: **matikan paksa terminal Laptop 1 (Master)** (`Ctrl + C`).
+   * Perhatikan layar Laptop 4 (`node-3` yang memiliki prioritas tertinggi di antara worker aktif): detektor kegagalan mendeteksi koordinator mati (3 kali heartbeat terlewat / 6 detik).
+   * `node-3` memicu Algoritma Bully, mendeklarasikan kemenangan, menyiarkan pesan VICTORY ke `node-1` dan `node-2` via RMI, lalu **mempromosikan diri menjadi Koordinator Baru** (mengaktifkan Scheduler dan REST Gateway di port 8080).
+   * Laptop 2 (`node-1`) dan Laptop 3 (`node-2`) secara otomatis mengalihkan koneksi gRPC ke Laptop 4 tanpa perlu restart biner.
+   * Buka browser proyektor ke alamat Laptop 4 (`http://<IP_LAPTOP_4>:8080`): sistem kluster kembali berjalan normal seutuhnya.
 
 ---
 
