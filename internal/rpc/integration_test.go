@@ -145,7 +145,7 @@ func TestIntegration_RegisterAndHeartbeat(t *testing.T) {
 		t.Logf("dead dari TickDeadCheck: %v", dead)
 		t.Fatalf("node seharusnya dead, got status=%s", nodeInfo.Status)
 	}
-	t.Logf("Node berhasil dideteksi mati (status=%s) ✓", nodeInfo.Status)
+	t.Logf("Node berhasil dideteksi mati (status=%s)", nodeInfo.Status)
 }
 
 // TestIntegration_ProcessImage memverifikasi end-to-end:
@@ -205,7 +205,7 @@ func TestIntegration_ProcessImage(t *testing.T) {
 		t.Fatal("hasil gambar kosong")
 	}
 
-	t.Logf("ProcessImage OK — task=%s, durasi=%dms, hasil=%d byte ✓",
+	t.Logf("ProcessImage OK — task=%s, durasi=%dms, hasil=%d byte",
 		resp.GetTaskId(), resp.GetDurationMs(), len(resp.GetResultData()))
 }
 
@@ -251,7 +251,7 @@ func TestIntegration_InvalidToken(t *testing.T) {
 	if err == nil {
 		t.Fatal("Register dengan token salah seharusnya error, tapi tidak")
 	}
-	t.Logf("Token salah ditolak dengan benar: %v ✓", err)
+	t.Logf("Token salah ditolak dengan benar: %v", err)
 }
 
 // TestIntegration_AutoAssignNodeID menguji bahwa registrasi dengan ID "auto" atau kosong

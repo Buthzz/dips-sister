@@ -7,7 +7,7 @@
 ---
 
 > [!IMPORTANT]
-> ### 🚀 Cheatsheet Cepat Hari-H Demo (3 Langkah Anti-Gagal)
+> ### Cheatsheet Cepat Hari-H Demo (3 Langkah Anti-Gagal)
 > 1. **Laptop 1 (Master):** Buka Windows Settings $\rightarrow$ Aktifkan **Mobile Hotspot**. Buka PowerShell lalu jalankan:
 >    ```powershell
 >    .\dist\distapi.exe --mode=master --tui

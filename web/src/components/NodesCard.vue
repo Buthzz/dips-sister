@@ -80,8 +80,8 @@ async function testaKoneksi(nodeId) {
               >
                 {{
                   probing[n.node_id].result.reachable
-                    ? `✅ ${probing[n.node_id].result.latency_ms} ms`
-                    : `❌ Tidak terjangkau`
+                    ? `${probing[n.node_id].result.latency_ms} ms`
+                    : `Tidak terjangkau`
                 }}
               </span>
             </td>
