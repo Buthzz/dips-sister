@@ -38,18 +38,18 @@ flowchart LR
 | :--- | :---: | :--- |
 | **Konfigurasi 12-Factor (`config`)** | 100% ✅ | Evaluasi CLI Flag > Env > Default, *fail-fast validation*, 10 unit test PASS |
 | **Persistensi Atomik (`storage`)** | 100% ✅ | Atomic write via temp file + rename, Windows NTFS lock-retry, 9 unit test PASS |
-| **Home-Based Naming (`registry`)** | 100% ✅ | Pemetaan flat-name, resolusi $O(1)$, sesi dinamis & heartbeat, 9 unit test PASS |
-| **RPC & Interceptor (`rpc`)** | 100% ✅ | Coordinator & Worker service gRPC, auth metadata token, connection pooling |
+| **Home-Based Naming (`registry`)** | 100% ✅ | Pemetaan flat-name, resolusi $O(1)$, sesi dinamis & heartbeat, 12 unit test PASS |
+| **RPC & Interceptor (`rpc`)** | 100% ✅ | Coordinator & Worker service gRPC, auth metadata token, connection pooling, 6 unit test PASS |
 | **Remote Method Invocation (`rmi`)** | 100% ✅ | Remote Object `CoordinatorService` & `ImageProcessorService` (`net/rpc`), 5 unit test PASS |
 | **Sinkronisasi & Bully Election (`election`)** | 100% ✅ | Penentuan koordinator & Dynamic Failover otomatis jika master mati, 3 unit test PASS |
-| **Pemroses Citra Murni (`worker`)** | 100% ✅ | Nearest-neighbour aspect resizing & grayscale ITU-R BT.601, 9 unit test PASS |
-| **Scatter-Gather Engine (`scheduler`)** | 100% ✅ | Concurrency via goroutines, retry $\le 3$, first-result-wins, 8 unit test PASS |
-| **RESTful Gateway (`api`)** | 100% ✅ | 8 endpoint standar, multipart parser, JSON error envelope, 10 unit test PASS |
+| **Pemroses Citra Murni (`worker`)** | 100% ✅ | Nearest-neighbour aspect resizing & grayscale ITU-R BT.601, 11 unit test PASS |
+| **Scatter-Gather Engine (`scheduler`)** | 100% ✅ | Concurrency via goroutines, retry $\le 3$, first-result-wins, 9 unit test PASS |
+| **RESTful Gateway (`api`)** | 100% ✅ | 8 endpoint standar, multipart parser, JSON error envelope, 11 unit test PASS |
 | **Entry Point Kompilasi (`main.go`)** | 100% ✅ | Composition root, graceful shutdown 10 detik, background monitors |
+| **Terminal UI Visual (`tui`)** | 100% ✅ | Antarmuka visual interaktif Bubble Tea & Lip Gloss untuk Master & Node Worker, 5 unit test PASS |
 | **Kompilasi & Analisis Statik (`go vet`)** | 100% ✅ | **0 Warning, 0 Lint Error**, arsitektur clean tanpa *circular imports* |
 | **Dokumentasi Sistem Terdistribusi (`docs/`)** | 100% ✅ | 2 laporan komprehensif terpadu (Teori/Arsitektur & Panduan Operasional) dengan diagram Mermaid |
 | **Frontend Web Client** | 100% ✅ | Vue 3 + Vite, upload drag-&-drop, daftar & progres job (polling 2s), status node, unduh hasil; di-embed ke binary |
-| **Terminal UI Visual (`tui`)** | 100% ✅ | Antarmuka visual interaktif Bubble Tea & Lip Gloss untuk Master & Node Worker |
 | **Perlindungan Identitas Node** | 100% ✅ | Pencegahan tabrakan node-id duplikat, session hijacking guard, & pemulihan restart |
 | **Pengujian Fisik 4 Laptop (Keputusan D1)** | 100% ✅ | Konektivitas TCP antar-4 laptop terverifikasi pada jaringan fisik |
 
@@ -94,7 +94,7 @@ Pastikan seluruh *quality gate* berikut berstatus hijau sebelum melakukan demons
 ```powershell
 go build ./...       # Verifikasi kompilasi seluruh package
 go vet ./...         # Analisis statik bawaan Go (Wajib 0 warning)
-go test ./...        # Eksekusi seluruh rangkaian unit test (7 package PASS)
+go test ./...        # Eksekusi seluruh rangkaian unit test (10 package PASS, 81 test)
 ```
 
 ## Dokumentasi Proyek Terpadu (`docs/`)
@@ -103,7 +103,7 @@ Dokumentasi sistem telah dirampingkan secara efisien menjadi **dua laporan kompr
 
 | Dokumen | Deskripsi & Cakupan Bahasan |
 | :--- | :--- |
-| **[`docs/laporan-sistem.md`](docs/laporan-sistem.md)** | **Laporan Rekayasa & Teori Sistem Terdistribusi**<br>• Pemetaan Silabus Kuliah (Slide 01–06 dosen ke baris kode konkret)<br>• Arsitektur Master-Slave & Alur Data Scatter-Gather<br>• Protokol gRPC, Kontrak Protocol Buffers v3, & Semantik *At-Least-Once*<br>• Home-Based Naming Service & Alokasi Otomatis Node ID<br>• Failure Detector Cristian (1991), FSM Task, & *First-Result-Wins*<br>• Analisis Kinerja Hukum Amdahl ($P = 0.85$)<br>• Panduan Menjawab Pertanyaan Dosen Penguji |
+| **[`docs/laporan-sistem.md`](docs/laporan-sistem.md)** | **Laporan Rekayasa & Teori Sistem Terdistribusi**<br>• Pemetaan Silabus Kuliah (Slide 01–06 dosen ke baris kode konkret)<br>• Arsitektur Master-Slave & Alur Data Scatter-Gather<br>• Protokol gRPC, Kontrak Protocol Buffers v3, & Semantik *At-Least-Once*<br>• Remote Method Invocation (RMI) & Sinkronisasi Bully Failover<br>• Home-Based Naming Service & Alokasi Otomatis Node ID<br>• Failure Detector Cristian (1991), FSM Task, & *First-Result-Wins*<br>• Analisis Kinerja Hukum Amdahl ($P = 0.85$) |
 | **[`docs/panduan-operasional.md`](docs/panduan-operasional.md)** | **Manual Operasional, REST API, & Troubleshooting**<br>• Prasyarat Kompilasi & Aturan Windows Defender Firewall<br>• Panduan Eksekusi Master & Node Worker (CLI / TUI)<br>• Spesifikasi Kontrak 8 Endpoint REST API Gateway & Contoh `curl`<br>• Skenario Uji Demonstrasi Praktis di Kelas (Normal & Failover)<br>• Troubleshooting Windows (Mitigasi Wi-Fi Isolation, Hotspot SOP, Konflik Port) |
 
 

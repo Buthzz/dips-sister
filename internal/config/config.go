@@ -164,6 +164,7 @@ DESKRIPSI:
 SINTAKS:
   distapi --mode=master [opsi...]
   distapi --mode=node --master=<host:port> [opsi...]
+  distapi rmi-test [target]
   distapi team | authors | version
   distapi -h | --help | help
 
@@ -268,7 +269,7 @@ CONTOH PENGUJIAN REST API (curl.exe / PowerShell):
 CATATAN & TROUBLESHOOTING:
   - Setiap opsi CLI dapat dikonfigurasi melalui environment variable dengan prefiks
     DISTAPI_ (contoh: DISTAPI_TOKEN=demo123, DISTAPI_MODE=master, DISTAPI_TUI=true).
-  - Pastikan port 9000 TCP (gRPC) dan 8080 TCP (HTTP) diizinkan pada Windows Firewall
+  - Pastikan port 9000 TCP (gRPC), 8080 TCP (HTTP), dan 9050 TCP (RMI) diizinkan pada Windows Firewall
     di seluruh laptop agar koneksi antar-node tidak terblokir.
   - Jika menggunakan Wi-Fi publik/kampus yang menerapkan Client Isolation, gunakan
     Hotspot Portabel dari HP agar seluruh laptop dapat saling berkomunikasi secara langsung.

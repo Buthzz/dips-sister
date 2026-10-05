@@ -135,11 +135,12 @@ Riwayat Pemrosesan Task
     IP Master Terdeteksi : 192.168.1.10
     Web UI / REST API    : http://192.168.1.10:8080 (atau http://localhost:8080)
     gRPC Cluster Port    : 192.168.1.10:9000
+    RMI net/rpc Port     : 192.168.1.10:9050
 
   Perintah yang dapat disalin untuk laptop Node Worker:
-    .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --tui
+    .\dist\distapi.exe --mode=node --master=192.168.1.10:9000 --token=demo123 --tui
 
-  2026/09/26 20:45:00 INFO master aktif di 192.168.1.10:9000 (HTTP :8080)
+  2026/09/26 20:45:00 INFO master aktif di 192.168.1.10:9000 (HTTP :8080, RMI :9050)
   2026/09/26 20:45:05 INFO node terdaftar node_id=node-1 addr=192.168.1.11:9000 capacity=8
   2026/09/26 20:45:07 INFO node terdaftar node_id=node-2 addr=192.168.1.12:9000 capacity=8
   2026/09/26 20:45:09 INFO node terdaftar node_id=node-3 addr=192.168.1.13:9000 capacity=8
@@ -152,6 +153,8 @@ Riwayat Pemrosesan Task
     IP Node Terdeteksi   : 192.168.1.11
     Advertise ke Master  : 192.168.1.11:9000
     Master Tujuan        : 192.168.1.10:9000
+    RMI net/rpc Port     : 9050
+    Prioritas Pemilihan  : 0 (Bully Algorithm)
 
   [Node Terdaftar ke Master]
     Identitas Terkonfirmasi : node-1
@@ -331,9 +334,12 @@ Gunakan urutan demonstrasi praktis 5 menit ini untuk membuktikan fungsionalitas 
 
 ### Skenario C: Konflik Port (*Address Already in Use*)
 * **Gejala:** Error `bind: Only one usage of each socket address is normally permitted`.
-* **Solusi:** Port 9000 atau 8080 masih terkunci oleh proses lama. Temukan PID dan matikan prosesnya:
+* **Solusi:** Port 9000 (gRPC), 8080 (HTTP), atau 9050 (RMI) masih terkunci oleh proses lama. Temukan PID dan matikan prosesnya:
   ```powershell
-  Get-NetTCPConnection -LocalPort 9000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+  # Matikan proses yang menduduki port 9000, 8080, atau 9050
+  9000, 8080, 9050 | ForEach-Object {
+    Get-NetTCPConnection -LocalPort $_ -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+  }
   ```
 
 ### Skenario D: Skrip Pengecekan Kesehatan Pra-Demo (Pre-Flight Check)
@@ -349,9 +355,11 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
     Write-Host "[FAIL] Kompiler Go tidak terdeteksi!" -ForegroundColor Red
 }
 
-# 2. Cek Status Port 8080 & 9000
+# 2. Cek Status Port 8080, 9000, & 9050
 $p8080 = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
 $p9000 = Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue
+$p9050 = Get-NetTCPConnection -LocalPort 9050 -ErrorAction SilentlyContinue
 if ($p8080) { Write-Host "[WARN] Port 8080 terpakai PID $($p8080.OwningProcess)" -ForegroundColor Yellow } else { Write-Host "[OK] Port 8080 bebas." -ForegroundColor Green }
 if ($p9000) { Write-Host "[WARN] Port 9000 terpakai PID $($p9000.OwningProcess)" -ForegroundColor Yellow } else { Write-Host "[OK] Port 9000 bebas." -ForegroundColor Green }
+if ($p9050) { Write-Host "[WARN] Port 9050 terpakai PID $($p9050.OwningProcess)" -ForegroundColor Yellow } else { Write-Host "[OK] Port 9050 bebas." -ForegroundColor Green }
 ```
