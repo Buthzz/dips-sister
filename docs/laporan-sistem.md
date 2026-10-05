@@ -353,38 +353,3 @@ flowchart TD
 
 > **Keunggulan Modularitas:** `internal/scheduler` mendefinisikan interface `NodeClient` secara mandiri tanpa mengimpor package `internal/rpc`. Ini mencegah ketergantungan sirkular (*circular imports*) dan memungkinkan unit test dijalankan dengan *mock adapter*.
 
----
-
-## 9. Panduan Tanya-Jawab Ujian Dosen (Kisi-Kisi per Anggota Tim)
-
-Bagian ini dirancang agar setiap anggota tim dapat menguasai bidang tanggung jawabnya dan siap menjawab pertanyaan dosen secara percaya diri:
-
-### A. Pertanyaan Umum Arsitektur & Konsep (Untuk Semua Anggota)
-* **Dosen:** *"Mengapa memilih arsitektur Master-Slave, bukan Peer-to-Peer murni?"*  
-  **Jawaban:** *"Sesuai materi slide 04 Arsitektur, transformasi citra digital bersifat embarrassingly parallel di mana tiap berkas dapat diproses independen. Pola Master-Slave mempermudah agregasi hasil dan koordinasi tugas tanpa memerlukan konsensus terdistribusi yang berat (seperti Paxos atau Raft) yang berlebihan untuk kluster 4 node."*
-* **Dosen:** *"Kalian mengimplementasikan REST API, RPC, dan RMI. Apa perbedaan mendasar ketiganya dalam sistem kalian?"*  
-  **Jawaban:** *"Sesuai silabus slide 03 dan 06: REST API (HTTP/JSON) digunakan untuk klien luar dan Web UI yang butuh keterbukaan standar. RPC (gRPC HTTP/2 Protobuf) digunakan untuk transmisi data citra biner skala besar antar node dengan kecepatan tinggi. RMI (`net/rpc` TCP) berbasis Remote Object digunakan untuk sinkronisasi kluster, pertukaran topologi peer, dan pemilihan koordinator Algoritma Bully."*
-
-### B. Bidang Scheduler & Concurrency (Rafli Khiyanuran Bazhari)
-* **Dosen:** *"Bagaimana Master membagi beban kerja ke worker, dan apa yang terjadi jika satu worker lambat?"*  
-  **Jawaban:** *"Master menggunakan pola Scatter-Gather dengan dispatcher Round-Robin berbasis atomic counter (`sync/atomic`). Jika ada worker lambat atau gagal merespons dalam jendela task-timeout 30 detik, task otomatis di-reschedule ke node lain (maksimal 3 kali percobaan) sesuai semantik At-Least-Once."*
-* **Dosen:** *"Mengapa sistem kalian menerapkan First-Result-Wins?"*  
-  **Jawaban:** *"Untuk mengantisipasi skenario slow node (worker lambat yang dianggap mati padahal masih memproses). Hasil olahan pertama yang tiba di Master akan langsung mengunci task menjadi DONE dan disimpan secara atomik. Jika hasil dari worker lama yang terlambat datang kemudian, hasil tersebut diabaikan dengan aman tanpa memicu korupsi data."*
-
-### C. Bidang RPC, Protocol Buffers, & Heartbeat (Irma Annisatul Jannah)
-* **Dosen:** *"Di mana letak penerapan gRPC dan mengapa tidak memakai REST API saja untuk komunikasi antar-laptop?"*  
-  **Jawaban:** *"gRPC berbasis HTTP/2 dan Protocol Buffers v3 digunakan untuk komunikasi internal (Master ke Worker). Alasannya adalah efisiensi transmisi biner: jika memakai REST/JSON, berkas gambar 5 MB harus di-encode Base64 yang membengkakkan ukuran paket sebesar 33% (~6.6 MB). Dengan gRPC, payload ditransmisikan langsung dalam bentuk raw bytes murni."*
-* **Dosen:** *"Bagaimana cara kerja Failure Detector kalian?"*  
-  **Jawaban:** *"Kami menerapkan Unreliable Failure Detector tipe periodic ping. Setiap worker mengirim RPC Heartbeat setiap 2 detik. Master memiliki monitor loop latar belakang yang memeriksa selisih waktu terakhir. Jika dalam 6 detik (3 interval berturut-turut terlewat) tidak ada sinyal, node dinyatakan mati (dead) dan task-nya dijadwalkan ulang."*
-
-### D. Bidang Sinkronisasi, RMI, & Failover (Muhammad Fajar Nugroho)
-* **Dosen:** *"Bagaimana sistem kalian menentukan koordinator, dan apa yang terjadi jika laptop Master tiba-tiba mati / crash?"*  
-  **Jawaban:** *"Koordinator ditentukan berdasarkan bobot prioritas tertinggi. Jika Master mati, failure detector di worker mendeteksi ketiadaan respons heartbeat RMI sebanyak 3 kali berturut-turut (6 detik). Hal ini memicu Algoritma Bully (Garcia-Molina, 1982): worker mengirim pesan pemilihan ke node berprioritas lebih tinggi. Node aktif dengan prioritas tertinggi memenangkan pemilihan, menyiarkan pesan Victory via RMI, mempromosikan dirinya sendiri menjadi Koordinator baru (menjalankan Scheduler dan REST API Gateway), dan node-node lain secara otomatis mengalihkan koneksi gRPC ke koordinator baru tersebut tanpa perlu me-restart aplikasi."*
-* **Dosen:** *"Bagaimana sistem menjamin keutuhan berkas gambar di penyimpanan Master tanpa database eksternal?"*  
-  **Jawaban:** *"Kami menerapkan Atomic Write: berkas ditulis terlebih dahulu ke berkas sementara (.tmp-*), di-flush ke disk, lalu di-rename ke path akhir secara atomik oleh OS. Ini menjamin pembaca paralel tidak akan pernah membaca berkas setengah jadi atau korup, sekaligus menghindari overhead instalasi database server."*
-
-### E. Bidang Frontend Web Client & Evaluasi (Zakaria Mujur Prasetyo)
-* **Dosen:** *"Bagaimana Web UI terhubung ke sistem terdistribusi ini?"*  
-  **Jawaban:** *"Web UI dibangun dengan Vue 3 dan di-embed langsung ke dalam biner tunggal Go via `//go:embed`. Web UI berkomunikasi ke Master via REST API: mengirim multipart form gambar dengan respons asinkron `202 Accepted`, lalu melakukan polling progres setiap 2 detik untuk menampilkan status task dan visualisasi latensi kluster."*
-* **Dosen:** *"Apakah sistem ini benar-benar mempercepat pemrosesan dibanding dijalankan di 1 laptop?"*  
-  **Jawaban:** *"Ya. Sesuai analisis Hukum Amdahl pada dokumen kami, komputasi matriks piksel mendominasi beban kerja (P = 0.85). Dengan mendistribusikan gambar ke 4 laptop fisik secara paralel, kami mencapai percepatan teoretis hingga 2.76x dibanding hanya memproses secara lokal di laptop master."*
